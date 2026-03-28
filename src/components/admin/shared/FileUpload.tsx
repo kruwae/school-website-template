@@ -39,6 +39,16 @@ function formatBytes(bytes: number): string {
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+function sanitizeStorageSegment(value: string): string {
+    return value
+        .normalize('NFKD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^a-zA-Z0-9._-]/g, '-')
+        .replace(/-+/g, '-')
+        .replace(/^[.-]+|[.-]+$/g, '')
+        .trim();
+}
+
 export interface FileUploadResult {
     url: string;
     name: string;
@@ -97,13 +107,17 @@ export const FileUpload = ({
             // จึงสร้างชื่อไฟล์ใหม่ให้เป็น ASCII ล้วน และเก็บชื่อไฟล์จริงไว้แค่สำหรับแสดงผลในระบบ
             const originalExt = file.name.split('.').pop()?.toLowerCase();
             const mimeExt = ACCEPTED_TYPES[file.type]?.toLowerCase();
-            const ext = (originalExt || mimeExt || 'bin').replace(/[^a-z0-9]/g, '') || 'bin';
+            const ext = sanitizeStorageSegment(originalExt || mimeExt || 'bin').replace(/\./g, '') || 'bin';
             const safeFolder = folder
                 .split('/')
-                .map(part => part.replace(/[^a-zA-Z0-9_-]/g, '').trim())
+                .map(part => sanitizeStorageSegment(part).replace(/\./g, ''))
                 .filter(Boolean)
                 .join('/');
-            const filePath = `${safeFolder || 'documents'}/${Date.now()}-${Math.random().toString(36).slice(2, 10)}.${ext}`;
+
+            const originalBaseName = file.name.replace(/\.[^.]+$/, '');
+            const safeBaseName = sanitizeStorageSegment(originalBaseName).replace(/\./g, '') || 'file';
+            const uniqueSuffix = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+            const filePath = `${safeFolder || 'documents'}/${uniqueSuffix}-${safeBaseName}.${ext}`;
 
             setProgress(30);
             const { data, error } = await supabase.storage
