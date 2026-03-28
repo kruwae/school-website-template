@@ -89,6 +89,7 @@ export const MaintenanceManagement = () => {
     const [showViewDialog, setShowViewDialog] = useState(false);
     const [viewRecord, setViewRecord] = useState<MaintenanceRequest | null>(null);
     const [editRecord, setEditRecord] = useState<MaintenanceRequest | null>(null);
+    const [saving, setSaving] = useState(false);
     const [form, setForm] = useState({
         title: '', location: '', room_number: '', description: '',
         priority: 'normal', status: 'pending', reported_by: currentUserName,
@@ -148,30 +149,66 @@ export const MaintenanceManagement = () => {
     };
 
     const handleSave = async () => {
-        if (!form.title || !form.reported_by) {
-            toast({ title: 'กรุณากรอกข้อมูลให้ครบ', variant: 'destructive' });
+        if (!form.title.trim() || !form.reported_by.trim()) {
+            toast({ title: 'กรุณากรอกหัวข้อและชื่อผู้แจ้ง', variant: 'destructive' });
             return;
         }
+        if (!form.description.trim()) {
+            toast({ title: 'กรุณากรอกรายละเอียดปัญหา', variant: 'destructive' });
+            return;
+        }
+
         const payload = {
-            title: form.title, location: form.location, room_number: form.room_number,
-            description: form.description, priority: form.priority, status: form.status,
-            reported_by: form.reported_by, reporter_phone: form.reporter_phone,
-            assigned_to: form.assigned_to, completion_notes: form.completion_notes,
+            title: form.title.trim(),
+            location: form.location.trim() || null,
+            room_number: form.room_number.trim() || null,
+            description: form.description.trim(),
+            priority: form.priority,
+            status: editRecord ? form.status : 'pending',
+            reported_by: form.reported_by.trim(),
+            reporter_phone: form.reporter_phone.trim() || null,
+            assigned_to: form.assigned_to.trim() || null,
+            completion_notes: form.completion_notes.trim() || null,
             image_before: form.image_before || null,
             image_during: form.image_during || null,
-            image_after:  form.image_after  || null,
+            image_after: form.image_after || null,
         };
+
+        setSaving(true);
         try {
+            let result;
             if (editRecord) {
-                await (supabase.from('maintenance_requests' as any) as any).update(payload).eq('id', editRecord.id);
-                toast({ title: 'อัปเดตสำเร็จ ✅' });
+                result = await (supabase.from('maintenance_requests' as any) as any)
+                    .update(payload)
+                    .eq('id', editRecord.id);
             } else {
-                await (supabase.from('maintenance_requests' as any) as any).insert([payload]);
-                toast({ title: 'แจ้งซ่อมสำเร็จ ✅' });
+                result = await (supabase.from('maintenance_requests' as any) as any)
+                    .insert([payload]);
             }
+
+            if (result?.error) {
+                console.error('[maintenance] save error:', result.error);
+                toast({
+                    title: editRecord ? 'อัปเดตรายการไม่สำเร็จ' : 'แจ้งซ่อมไม่สำเร็จ',
+                    description: result.error.message,
+                    variant: 'destructive',
+                });
+                return;
+            }
+
+            toast({ title: editRecord ? 'อัปเดตสำเร็จ ✅' : 'แจ้งซ่อมสำเร็จ ✅' });
             setShowDialog(false);
             fetchRecords();
-        } catch (e) { toast({ title: 'เกิดข้อผิดพลาด', variant: 'destructive' }); }
+        } catch (e: any) {
+            console.error('[maintenance] unexpected save error:', e);
+            toast({
+                title: 'เกิดข้อผิดพลาด',
+                description: e?.message || 'ไม่สามารถบันทึกรายการแจ้งซ่อมได้',
+                variant: 'destructive',
+            });
+        } finally {
+            setSaving(false);
+        }
     };
 
     const handleDelete = async (id: string) => {
@@ -534,8 +571,10 @@ export const MaintenanceManagement = () => {
                     </div>
 
                     <DialogFooter>
-                        <Button variant="outline" onClick={() => setShowDialog(false)}>ยกเลิก</Button>
-                        <Button onClick={handleSave}>{editRecord ? 'บันทึก' : 'ส่งแจ้งซ่อม'}</Button>
+                        <Button variant="outline" onClick={() => setShowDialog(false)} disabled={saving}>ยกเลิก</Button>
+                        <Button onClick={handleSave} disabled={saving}>
+                            {saving ? 'กำลังบันทึก...' : editRecord ? 'บันทึก' : 'ส่งแจ้งซ่อม'}
+                        </Button>
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
