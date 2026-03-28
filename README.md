@@ -1,73 +1,55 @@
-# Welcome to your Lovable project
+# School Website Template (โรงเรียนห้องสื่อครูคอมวิทยาคม)
 
-## Project info
+A modern, responsive, and customizable school website template built with React, Vite, Tailwind CSS, and Supabase.
 
-**URL**: https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID
+![School Website Preview](./public/og-image.png) <!-- Ensure an image exists or remove this line -->
 
-## How can I edit this code?
+## 🌟 Features
+- **Modern UI/UX**: Responsive design suitable for all devices.
+- **News & Activities**: Dynamic news management system.
+- **Gallery**: Photo albums and activities showcase.
+- **Admin Dashboard**: Comprehensive backend for managing content.
+- **Database Integrated**: Powered by Supabase for real-time data.
 
-There are several ways of editing your application.
+## 🚀 Getting Started
 
-**Use Lovable**
+If you are a developer or have some technical background, here is the quick start:
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and start prompting.
+1.  **Clone the repo**
+    ```bash
+    git clone https://github.com/your-username/school-website-template.git
+    cd school-website-template
+    ```
 
-Changes made via Lovable will be committed automatically to this repo.
+2.  **Install dependencies**
+    ```bash
+    npm install
+    ```
 
-**Use your preferred IDE**
+3.  **Environment Setup**
+    - Copy `.env.example` to `.env`
+    - Fill in your Supabase credentials (`VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`)
 
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
+4.  **Database Setup**
+    - Create a new Supabase project.
+    - Run the SQL migrations found in `supabase/migrations/` in order.
 
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
+5.  **Run Development Server**
+    ```bash
+    npm run dev
+    ```
 
-Follow these steps:
+## 📚 Detailed Installation Guide (ภาษาไทย)
 
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
+สำหรับโรงเรียนที่ต้องการนำไปใช้งาน เรามีคู่มือสอนการติดตั้งแบบละเอียดทุกขั้นตอน (Step-by-Step) ตั้งแต่เริ่มสมัครจนถึงขึ้นระบบ
 
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
+👉 **[อ่านคู่มือการติดตั้งฉบับสมบูรณ์ (คลิกที่นี่)](./DEPLOYMENT_GUIDE.md)**
 
-# Step 3: Install the necessary dependencies.
-npm i
+## 🛠 Tech Stack
+- **Framework**: [Vite](https://vitejs.dev/) + [React](https://react.dev/)
+- **Language**: [TypeScript](https://www.typescriptlang.org/)
+- **Styling**: [Tailwind CSS](https://tailwindcss.com/) + [shadcn/ui](https://ui.shadcn.com/)
+- **Backend/DB**: [Supabase](https://supabase.com/)
 
-# Step 4: Start the development server with auto-reloading and an instant preview.
-npm run dev
-```
-
-**Edit a file directly in GitHub**
-
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
-
-**Use GitHub Codespaces**
-
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
-
-## What technologies are used for this project?
-
-This project is built with:
-
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
-
-## How can I deploy this project?
-
-Simply open [Lovable](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and click on Share -> Publish.
-
-## Can I connect a custom domain to my Lovable project?
-
-Yes, you can!
-
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
-
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+## 📄 License
+MIT License. Free to use for educational purposes.

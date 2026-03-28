@@ -30,7 +30,7 @@ export const NewsForm = ({ news, onSuccess, onCancel }: NewsFormProps) => {
         content: news?.content || '',
         category: news?.category || '',
         cover_image_url: news?.cover_image_url || '',
-        is_published: news?.is_published || false,
+        published: news?.published || false,
         is_pinned: news?.is_pinned || false,
         external_links: news?.external_links || [] as { title: string; url: string }[],
     });
@@ -60,7 +60,7 @@ export const NewsForm = ({ news, onSuccess, onCancel }: NewsFormProps) => {
         try {
             const dataToSave = {
                 ...formData,
-                published_at: formData.is_published ? new Date().toISOString() : null,
+                published_at: formData.published ? new Date().toISOString() : null,
                 updated_at: new Date().toISOString(),
             };
 
@@ -285,8 +285,8 @@ export const NewsForm = ({ news, onSuccess, onCancel }: NewsFormProps) => {
                                     </p>
                                 </div>
                                 <Switch
-                                    checked={formData.is_published}
-                                    onCheckedChange={(checked) => setFormData({ ...formData, is_published: checked })}
+                                    checked={formData.published}
+                                    onCheckedChange={(checked) => setFormData({ ...formData, published: checked })}
                                 />
                             </div>
 

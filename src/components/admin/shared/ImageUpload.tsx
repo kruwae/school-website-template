@@ -17,7 +17,7 @@ interface ImageUploadProps {
 export const ImageUpload = ({
     onUploadComplete,
     currentImage,
-    bucket = 'images',
+    bucket = 'school-images',
     folder = 'uploads',
     maxSizeMB = 5,
     compressionPreset = 'profile',

@@ -115,7 +115,7 @@ const SortableNewsItem = ({
 
             {/* Status */}
             <div className="flex items-center gap-2">
-                {item.is_published ? (
+                {item.published ? (
                     <Badge className="bg-green-500">
                         <CheckCircle className="w-3 h-3 mr-1" />
                         เผยแพร่แล้ว
@@ -134,9 +134,9 @@ const SortableNewsItem = ({
                     variant="outline"
                     size="sm"
                     onClick={onTogglePublish}
-                    title={item.is_published ? 'ยกเลิกการเผยแพร่' : 'เผยแพร่'}
+                    title={item.published ? 'ยกเลิกการเผยแพร่' : 'เผยแพร่'}
                 >
-                    {item.is_published ? 'ซ่อน' : 'เผยแพร่'}
+                    {item.published ? 'ซ่อน' : 'เผยแพร่'}
                 </Button>
                 <Button variant="outline" size="icon" onClick={onEdit} title="แก้ไข">
                     <Edit className="w-4 h-4" />

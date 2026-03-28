@@ -39,7 +39,7 @@ const NewsSection = () => {
       const { data, error } = await supabase
         .from('news')
         .select('*')
-        .eq('is_published', true)
+        .eq('published', true)
         .order('is_pinned', { ascending: false })
         .order('sort_order', { ascending: true })
         .limit(4);

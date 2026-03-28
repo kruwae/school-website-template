@@ -17,7 +17,7 @@ export interface NewsItem {
     content: string;
     category: string;
     cover_image_url: string | null;
-    is_published: boolean;
+    published: boolean;
     is_pinned: boolean;
     published_at: string | null;
     sort_order: number;
@@ -131,8 +131,8 @@ export const NewsManagement = () => {
             const { error } = await supabase
                 .from('news')
                 .update({
-                    is_published: !item.is_published,
-                    published_at: !item.is_published ? new Date().toISOString() : item.published_at,
+                    published: !item.published,
+                    published_at: !item.published ? new Date().toISOString() : item.published_at,
                 })
                 .eq('id', item.id);
 
@@ -140,7 +140,7 @@ export const NewsManagement = () => {
 
             toast({
                 title: 'อัปเดตสำเร็จ',
-                description: !item.is_published ? 'เผยแพร่ข่าวสารแล้ว' : 'ยกเลิกการเผยแพร่แล้ว',
+                description: !item.published ? 'เผยแพร่ข่าวสารแล้ว' : 'ยกเลิกการเผยแพร่แล้ว',
             });
 
             fetchNews();

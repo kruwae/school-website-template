@@ -1,0 +1,303 @@
+import { useState, useEffect } from 'react';
+import { supabase } from '@/integrations/supabase/client';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Plus, FileText, Download, Trash2, FolderOpen } from 'lucide-react';
+import {
+    Select, SelectContent, SelectItem, SelectTrigger, SelectValue
+} from '@/components/ui/select';
+import {
+    Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter
+} from '@/components/ui/dialog';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import { useToast } from '@/hooks/use-toast';
+import { FileUpload, type FileUploadResult } from '@/components/admin/shared/FileUpload';
+import { getCurrentUser } from '@/lib/auth';
+
+interface Document {
+    id: string;
+    title: string;
+    department_id: string;
+    category_id: string;
+    academic_year: string;
+    status: string;
+    file_url: string;
+    file_name: string;
+    uploader_name: string;
+    description: string;
+    created_at: string;
+    document_categories?: { name: string };
+}
+interface Category { id: string; name: string; department_id: string; }
+
+const STATUS_MAP: Record<string, { label: string; variant: 'default' | 'secondary' | 'destructive' | 'outline' }> = {
+    draft: { label: 'ร่าง', variant: 'secondary' },
+    submitted: { label: 'ส่งแล้ว', variant: 'default' },
+    approved: { label: 'อนุมัติ', variant: 'default' },
+    rejected: { label: 'ปฏิเสธ', variant: 'destructive' },
+    archived: { label: 'เก็บถาวร', variant: 'outline' },
+};
+
+interface Props {
+    deptCode: string;
+    deptName: string;
+    color: string;
+}
+
+export const DepartmentDocuments = ({ deptCode, deptName, color }: Props) => {
+    const { toast } = useToast();
+    const currentUser = getCurrentUser();
+    const currentUserName = currentUser?.full_name || '';
+
+    const [documents, setDocuments] = useState<Document[]>([]);
+    const [categories, setCategories] = useState<Category[]>([]);
+    const [deptId, setDeptId] = useState<string>('');
+    const [loading, setLoading] = useState(true);
+    const [filterCat, setFilterCat] = useState('all');
+    const [filterYear, setFilterYear] = useState('2568');
+    const [showDialog, setShowDialog] = useState(false);
+    const [editDoc, setEditDoc] = useState<Document | null>(null);
+    const [form, setForm] = useState({
+        title: '', category_id: '', academic_year: '2568',
+        status: 'submitted', file_url: '', file_name: '', uploader_name: currentUserName, description: '',
+    });
+
+    useEffect(() => { fetchDeptAndDocs(); }, [deptCode, filterYear, filterCat]);
+
+    const fetchDeptAndDocs = async () => {
+        setLoading(true);
+        try {
+            const { data: deptData } = await (supabase.from('departments' as any) as any).select('id').eq('code', deptCode).single();
+            if (!deptData) return;
+            const id = deptData.id;
+            setDeptId(id);
+
+            const [docsRes, catsRes] = await Promise.all([
+                (supabase.from('documents' as any) as any)
+                    .select('*, document_categories(name)')
+                    .eq('department_id', id)
+                    .order('created_at', { ascending: false }),
+                (supabase.from('document_categories' as any) as any).select('*').eq('department_id', id).order('order_position'),
+            ]);
+            if (docsRes.data) setDocuments(docsRes.data);
+            if (catsRes.data) setCategories(catsRes.data);
+        } catch (e) { console.error(e); }
+        finally { setLoading(false); }
+    };
+
+    const filtered = documents.filter(d => {
+        const matchCat = filterCat === 'all' || d.category_id === filterCat;
+        const matchYear = d.academic_year === filterYear || filterYear === 'all';
+        return matchCat && matchYear;
+    });
+
+    const openAdd = () => {
+        setEditDoc(null);
+        setForm({ title: '', category_id: '', academic_year: '2568', status: 'submitted', file_url: '', file_name: '', uploader_name: currentUserName, description: '' });
+        setShowDialog(true);
+    };
+
+    const handleFileUploaded = (result: FileUploadResult) => {
+        setForm(p => ({ ...p, file_url: result.url, file_name: result.name }));
+    };
+
+    const handleSave = async () => {
+        if (!form.title) { toast({ title: 'กรุณากรอกชื่อเอกสาร', variant: 'destructive' }); return; }
+        const payload = { ...form, department_id: deptId };
+        try {
+            if (editDoc) {
+                await (supabase.from('documents' as any) as any).update(payload).eq('id', editDoc.id);
+                toast({ title: 'อัปเดตสำเร็จ' });
+            } else {
+                await (supabase.from('documents' as any) as any).insert([payload]);
+                toast({ title: 'เพิ่มเอกสารสำเร็จ' });
+            }
+            setShowDialog(false);
+            fetchDeptAndDocs();
+        } catch (e) { toast({ title: 'เกิดข้อผิดพลาด', variant: 'destructive' }); }
+    };
+
+    const handleDelete = async (id: string) => {
+        if (!confirm('ต้องการลบเอกสารนี้?')) return;
+        await (supabase.from('documents' as any) as any).delete().eq('id', id);
+        toast({ title: 'ลบสำเร็จ' });
+        fetchDeptAndDocs();
+    };
+
+    // Group by category
+    const byCategory: Record<string, Document[]> = {};
+    filtered.forEach(d => {
+        const cat = (d.document_categories as any)?.name || 'ไม่ระบุหมวด';
+        if (!byCategory[cat]) byCategory[cat] = [];
+        byCategory[cat].push(d);
+    });
+
+    return (
+        <div className="p-6">
+            <div className="flex justify-between items-center mb-6">
+                <div className="flex items-center gap-3">
+                    <div className={`w-10 h-10 rounded-xl ${color} flex items-center justify-center`}>
+                        <FolderOpen className="w-5 h-5 text-white" />
+                    </div>
+                    <div>
+                        <h1 className="text-xl font-bold">{deptName}</h1>
+                        <p className="text-sm text-muted-foreground">เอกสารและรายงาน</p>
+                    </div>
+                </div>
+                <Button onClick={openAdd} className="gap-2">
+                    <Plus className="w-4 h-4" /> เพิ่มเอกสาร
+                </Button>
+            </div>
+
+            {/* Filters */}
+            <div className="flex gap-3 mb-6">
+                <Select value={filterCat} onValueChange={setFilterCat}>
+                    <SelectTrigger className="w-48"><SelectValue placeholder="ทุกหมวด" /></SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="all">ทุกหมวด</SelectItem>
+                        {categories.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+                    </SelectContent>
+                </Select>
+                <Select value={filterYear} onValueChange={setFilterYear}>
+                    <SelectTrigger className="w-32"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="all">ทุกปี</SelectItem>
+                        {['2568', '2567', '2566', '2565'].map(y => <SelectItem key={y} value={y}>{y}</SelectItem>)}
+                    </SelectContent>
+                </Select>
+                <span className="text-sm text-muted-foreground self-center">{filtered.length} รายการ</span>
+            </div>
+
+            {/* Documents by Category */}
+            {loading ? (
+                <div className="p-12 text-center text-muted-foreground">กำลังโหลด...</div>
+            ) : Object.keys(byCategory).length === 0 ? (
+                <Card>
+                    <CardContent className="p-12 text-center">
+                        <FileText className="w-12 h-12 mx-auto mb-3 text-muted-foreground/40" />
+                        <p className="text-muted-foreground">ยังไม่มีเอกสาร กดปุ่ม "เพิ่มเอกสาร" เพื่อเริ่มต้น</p>
+                    </CardContent>
+                </Card>
+            ) : (
+                <div className="space-y-4">
+                    {Object.entries(byCategory).map(([catName, docs]) => (
+                        <Card key={catName}>
+                            <CardHeader className="pb-2 pt-4 px-4">
+                                <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                                    <span className={`w-2 h-2 rounded-full ${color}`} />
+                                    {catName} ({docs.length})
+                                </CardTitle>
+                            </CardHeader>
+                            <CardContent className="px-4 pb-4">
+                                <div className="space-y-2">
+                                    {docs.map(doc => (
+                                        <div key={doc.id} className="flex items-center justify-between p-3 bg-muted/30 rounded-lg hover:bg-muted/50 transition-colors">
+                                            <div className="flex items-center gap-3 min-w-0">
+                                                <FileText className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                                                <div className="min-w-0">
+                                                    <p className="text-sm font-medium truncate">{doc.title}</p>
+                                                    <p className="text-xs text-muted-foreground">{doc.uploader_name || '-'} • {doc.academic_year}</p>
+                                                </div>
+                                            </div>
+                                            <div className="flex items-center gap-2 flex-shrink-0">
+                                                <Badge variant={STATUS_MAP[doc.status]?.variant || 'secondary'} className="text-xs">
+                                                    {STATUS_MAP[doc.status]?.label || doc.status}
+                                                </Badge>
+                                                {doc.file_url && (
+                                                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => window.open(doc.file_url, '_blank')}>
+                                                        <Download className="w-3.5 h-3.5" />
+                                                    </Button>
+                                                )}
+                                                <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => handleDelete(doc.id)}>
+                                                    <Trash2 className="w-3.5 h-3.5" />
+                                                </Button>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </CardContent>
+                        </Card>
+                    ))}
+                </div>
+            )}
+
+            {/* Add Dialog */}
+            <Dialog open={showDialog} onOpenChange={setShowDialog}>
+                <DialogContent className="max-w-md">
+                    <DialogHeader>
+                        <DialogTitle>{editDoc ? 'แก้ไขเอกสาร' : `เพิ่มเอกสาร — ${deptName}`}</DialogTitle>
+                    </DialogHeader>
+                    <div className="space-y-3">
+                        <div>
+                            <Label>ชื่อเอกสาร *</Label>
+                            <Input value={form.title} onChange={e => setForm(p => ({ ...p, title: e.target.value }))} placeholder="ชื่อเอกสาร" />
+                        </div>
+                        <div className="grid grid-cols-2 gap-3">
+                            <div>
+                                <Label>หมวดหมู่</Label>
+                                <Select value={form.category_id} onValueChange={v => setForm(p => ({ ...p, category_id: v }))}>
+                                    <SelectTrigger><SelectValue placeholder="เลือก" /></SelectTrigger>
+                                    <SelectContent>
+                                        {categories.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                            <div>
+                                <Label>ปีการศึกษา</Label>
+                                <Select value={form.academic_year} onValueChange={v => setForm(p => ({ ...p, academic_year: v }))}>
+                                    <SelectTrigger><SelectValue /></SelectTrigger>
+                                    <SelectContent>
+                                        {['2568', '2567', '2566', '2565'].map(y => <SelectItem key={y} value={y}>{y}</SelectItem>)}
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                        </div>
+                        <div>
+                            <Label>ผู้อัปโหลด</Label>
+                            <Input
+                                value={form.uploader_name}
+                                readOnly={!editDoc}
+                                onChange={e => setForm(p => ({ ...p, uploader_name: e.target.value }))}
+                                placeholder="ชื่อผู้อัปโหลด"
+                                className={!editDoc ? 'bg-muted cursor-not-allowed' : ''}
+                            />
+                            {!editDoc && currentUserName && (
+                                <p className="text-xs text-muted-foreground mt-1">✅ ใช้ชื่อจากบัญชีที่ login</p>
+                            )}
+                        </div>
+                        <div>
+                            <Label>ไฟล์เอกสาร</Label>
+                            <FileUpload
+                                onUploadComplete={handleFileUploaded}
+                                currentFile={form.file_url ? { url: form.file_url, name: form.file_name || 'ไฟล์เอกสาร' } : undefined}
+                                bucket="school-images"
+                                folder="documents"
+                                maxSizeMB={20}
+                            />
+                        </div>
+                        <div>
+                            <Label>สถานะ</Label>
+                            <Select value={form.status} onValueChange={v => setForm(p => ({ ...p, status: v }))}>
+                                <SelectTrigger><SelectValue /></SelectTrigger>
+                                <SelectContent>
+                                    {Object.entries(STATUS_MAP).map(([k, v]) => <SelectItem key={k} value={k}>{v.label}</SelectItem>)}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                        <div>
+                            <Label>หมายเหตุ</Label>
+                            <Textarea value={form.description} onChange={e => setForm(p => ({ ...p, description: e.target.value }))} rows={2} />
+                        </div>
+                    </div>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setShowDialog(false)}>ยกเลิก</Button>
+                        <Button onClick={handleSave}>{editDoc ? 'บันทึก' : 'เพิ่ม'}</Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+        </div>
+    );
+};
