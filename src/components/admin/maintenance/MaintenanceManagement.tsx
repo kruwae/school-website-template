@@ -28,7 +28,6 @@ interface MaintenanceRequest {
     created_at: string;
     image_before: string | null;
     image_during: string | null;
-    image_after:  string | null;
 }
 
 const PRIORITY_MAP: Record<string, { label: string; color: string }> = {
@@ -94,7 +93,7 @@ export const MaintenanceManagement = () => {
         title: '', location: '', room_number: '', description: '',
         priority: 'normal', status: 'pending', reported_by: currentUserName,
         reporter_phone: '', assigned_to: '', completion_notes: '',
-        image_before: '', image_during: '', image_after: '',
+        image_before: '', image_during: '',
     });
 
     useEffect(() => { fetchRecords(); }, []);
@@ -120,7 +119,7 @@ export const MaintenanceManagement = () => {
             title: '', location: '', room_number: '', description: '',
             priority: 'normal', status: 'pending', reported_by: currentUserName,
             reporter_phone: '', assigned_to: '', completion_notes: '',
-            image_before: '', image_during: '', image_after: '',
+            image_before: '', image_during: '',
         });
         setShowDialog(true);
     };
@@ -134,7 +133,6 @@ export const MaintenanceManagement = () => {
             assigned_to: r.assigned_to || '', completion_notes: r.completion_notes || '',
             image_before: r.image_before || '',
             image_during: r.image_during || '',
-            image_after:  r.image_after  || '',
         });
         setShowDialog(true);
     };
@@ -171,7 +169,6 @@ export const MaintenanceManagement = () => {
             completion_notes: form.completion_notes.trim() || null,
             image_before: form.image_before || null,
             image_during: form.image_during || null,
-            image_after: form.image_after || null,
         };
 
         setSaving(true);
@@ -223,7 +220,7 @@ export const MaintenanceManagement = () => {
 
     // ── helper: count images in a record ──────────────────────────────────
     const imageCount = (r: MaintenanceRequest) =>
-        [r.image_before, r.image_during, r.image_after].filter(Boolean).length;
+        [r.image_before, r.image_during].filter(Boolean).length;
 
     return (
         <div className="p-6">
@@ -307,12 +304,6 @@ export const MaintenanceManagement = () => {
                                                 <div className="flex flex-col items-center gap-0.5">
                                                     <ThumbLink url={r.image_during} label="ระหว่างดำเนินการ" />
                                                     <span className="text-[10px] text-muted-foreground">ระหว่างซ่อม</span>
-                                                </div>
-                                            )}
-                                            {r.image_after && (
-                                                <div className="flex flex-col items-center gap-0.5">
-                                                    <ThumbLink url={r.image_after} label="หลังซ่อม" />
-                                                    <span className="text-[10px] text-muted-foreground">หลังซ่อม</span>
                                                 </div>
                                             )}
                                         </div>
@@ -407,11 +398,10 @@ export const MaintenanceManagement = () => {
                                 <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3 flex items-center gap-1">
                                     <Image className="w-3.5 h-3.5" /> ภาพประกอบ 3 ระยะ
                                 </p>
-                                <div className="grid grid-cols-3 gap-3">
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                     {[
                                         { url: viewRecord.image_before, label: '🔴 ก่อนซ่อม', desc: 'สภาพปัญหา' },
                                         { url: viewRecord.image_during, label: '🟡 ระหว่างซ่อม', desc: 'เจ้าหน้าที่ดำเนินการ' },
-                                        { url: viewRecord.image_after,  label: '🟢 หลังซ่อม', desc: 'เสร็จสิ้น' },
                                     ].map(({ url, label, desc }) => (
                                         <div key={label} className="text-center">
                                             <p className="text-xs font-medium mb-1">{label}</p>
@@ -547,21 +537,6 @@ export const MaintenanceManagement = () => {
                                     />
                                 </div>
 
-                                {/* ภาพหลังซ่อม */}
-                                <div>
-                                    <div className="flex items-center gap-1.5 mb-2">
-                                        <span className="w-2.5 h-2.5 rounded-full bg-green-500 flex-shrink-0" />
-                                        <Label className="text-xs font-semibold text-green-700">หลังซ่อม</Label>
-                                    </div>
-                                    <p className="text-[11px] text-muted-foreground mb-2">รูปยืนยันความเรียบร้อย</p>
-                                    <ImageUpload
-                                        bucket="school-images"
-                                        folder="maintenance/after"
-                                        compressionPreset="thumbnail"
-                                        currentImage={form.image_after}
-                                        onUploadComplete={url => setForm(p => ({ ...p, image_after: url }))}
-                                    />
-                                </div>
                             </div>
 
                             <p className="text-xs text-muted-foreground mt-3 p-2 bg-amber-50 border border-amber-200 rounded-lg">
