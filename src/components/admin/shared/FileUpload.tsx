@@ -52,6 +52,8 @@ interface FileUploadProps {
     bucket?: string;
     folder?: string;
     maxSizeMB?: number;
+    /** ถ้า false: แสดงไฟล์แบบ read-only — ไม่มีปุ่ม X และไม่อนุญาตเลือกไฟล์ใหม่ */
+    canRemoveFile?: boolean;
 }
 
 export const FileUpload = ({
@@ -60,6 +62,7 @@ export const FileUpload = ({
     bucket = 'school-images',
     folder = 'documents',
     maxSizeMB = 20,
+    canRemoveFile = true,
 }: FileUploadProps) => {
     const { toast } = useToast();
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -90,9 +93,17 @@ export const FileUpload = ({
         setIsUploading(true);
         setProgress(10);
         try {
-            const ext = file.name.split('.').pop() || 'bin';
-            const safeName = file.name.replace(/[^a-zA-Z0-9ก-๙._-]/g, '_');
-            const filePath = `${folder}/${Date.now()}_${safeName}`;
+            // สาเหตุที่อัปโหลดล้มเหลวคือ storage key มีอักขระภาษาไทย/อักขระพิเศษจากชื่อไฟล์เดิม
+            // จึงสร้างชื่อไฟล์ใหม่ให้เป็น ASCII ล้วน และเก็บชื่อไฟล์จริงไว้แค่สำหรับแสดงผลในระบบ
+            const originalExt = file.name.split('.').pop()?.toLowerCase();
+            const mimeExt = ACCEPTED_TYPES[file.type]?.toLowerCase();
+            const ext = (originalExt || mimeExt || 'bin').replace(/[^a-z0-9]/g, '') || 'bin';
+            const safeFolder = folder
+                .split('/')
+                .map(part => part.replace(/[^a-zA-Z0-9_-]/g, '').trim())
+                .filter(Boolean)
+                .join('/');
+            const filePath = `${safeFolder || 'documents'}/${Date.now()}-${Math.random().toString(36).slice(2, 10)}.${ext}`;
 
             setProgress(30);
             const { data, error } = await supabase.storage
@@ -171,9 +182,11 @@ export const FileUpload = ({
                     <Button variant="ghost" size="sm" className="h-8 text-xs" asChild>
                         <a href={uploadedFile.url} target="_blank" rel="noopener noreferrer">ดู</a>
                     </Button>
-                    <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={handleRemove}>
-                        <X className="w-3.5 h-3.5" />
-                    </Button>
+                    {canRemoveFile && (
+                        <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={handleRemove}>
+                            <X className="w-3.5 h-3.5" />
+                        </Button>
+                    )}
                 </div>
             </div>
         );
@@ -189,13 +202,14 @@ export const FileUpload = ({
                 className="hidden"
             />
             <div
-                onClick={() => !isUploading && fileInputRef.current?.click()}
-                onDragOver={onDragOver}
-                onDragLeave={onDragLeave}
-                onDrop={onDrop}
+                onClick={() => canRemoveFile && !isUploading && fileInputRef.current?.click()}
+                onDragOver={canRemoveFile ? onDragOver : undefined}
+                onDragLeave={canRemoveFile ? onDragLeave : undefined}
+                onDrop={canRemoveFile ? onDrop : undefined}
                 className={`
-                    relative w-full border-2 border-dashed rounded-xl transition-all cursor-pointer
+                    relative w-full border-2 border-dashed rounded-xl transition-all
                     flex flex-col items-center justify-center py-8 px-4 text-center
+                    ${canRemoveFile ? 'cursor-pointer' : 'cursor-default opacity-60'}
                     ${isDragging
                         ? 'border-primary bg-primary/5 scale-[1.01]'
                         : 'border-border hover:border-primary/50 hover:bg-secondary/50'

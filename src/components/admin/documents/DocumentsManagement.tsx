@@ -2,9 +2,9 @@ import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Plus, Search, FileText, Download, Trash2, Eye } from 'lucide-react';
+import { Plus, Search, FileText, Download, Trash2, Eye, Edit2, Lock } from 'lucide-react';
 import {
     Select, SelectContent, SelectItem, SelectTrigger, SelectValue
 } from '@/components/ui/select';
@@ -28,6 +28,7 @@ interface Document {
     file_name: string;
     file_type: string;
     uploader_name: string;
+    uploader_user_id: string | null;
     description: string;
     created_at: string;
     departments?: { name: string; color: string };
@@ -38,10 +39,10 @@ interface Department { id: string; name: string; code: string; color: string; }
 interface Category { id: string; name: string; department_id: string; }
 
 const STATUS_MAP: Record<string, { label: string; variant: 'default' | 'secondary' | 'destructive' | 'outline' }> = {
-    draft: { label: 'ร่าง', variant: 'secondary' },
-    submitted: { label: 'ส่งแล้ว', variant: 'default' },
-    approved: { label: 'อนุมัติ', variant: 'default' },
-    rejected: { label: 'ปฏิเสธ', variant: 'destructive' },
+    draft:    { label: 'ร่าง',     variant: 'secondary' },
+    submitted:{ label: 'ส่งแล้ว',  variant: 'default' },
+    approved: { label: 'อนุมัติ',  variant: 'default' },
+    rejected: { label: 'ปฏิเสธ',   variant: 'destructive' },
     archived: { label: 'เก็บถาวร', variant: 'outline' },
 };
 
@@ -49,6 +50,9 @@ export const DocumentsManagement = () => {
     const { toast } = useToast();
     const currentUser = getCurrentUser();
     const currentUserName = currentUser?.full_name || '';
+
+    /** เฉพาะ role = admin เท่านั้นที่มีสิทธิ์เต็ม (เพิ่ม/แก้ไข/ลบ) */
+    const isAdmin = currentUser?.role === 'admin';
 
     const [documents, setDocuments] = useState<Document[]>([]);
     const [departments, setDepartments] = useState<Department[]>([]);
@@ -58,12 +62,19 @@ export const DocumentsManagement = () => {
     const [filterDept, setFilterDept] = useState('all');
     const [filterYear, setFilterYear] = useState('all');
     const [filterStatus, setFilterStatus] = useState('all');
-    const [showDialog, setShowDialog] = useState(false);
+
+    // Dialog สำหรับ admin (เพิ่ม/แก้ไข)
+    const [showEditDialog, setShowEditDialog] = useState(false);
     const [editDoc, setEditDoc] = useState<Document | null>(null);
+    const [saving, setSaving] = useState(false);
     const [form, setForm] = useState({
         title: '', department_id: '', category_id: '', academic_year: '2568',
         status: 'draft', file_url: '', file_name: '', uploader_name: currentUserName, description: '',
     });
+
+    // Dialog สำหรับดูรายละเอียด (ทุก role)
+    const [showViewDialog, setShowViewDialog] = useState(false);
+    const [viewDoc, setViewDoc] = useState<Document | null>(null);
 
     useEffect(() => { fetchAll(); }, []);
 
@@ -71,9 +82,13 @@ export const DocumentsManagement = () => {
         setLoading(true);
         try {
             const [docsRes, deptsRes, catsRes] = await Promise.all([
-                supabase.from('documents' as any).select('*, departments(name,color), document_categories(name)').order('created_at', { ascending: false }),
-                supabase.from('departments' as any).select('*').eq('is_active', true).order('order_position'),
-                supabase.from('document_categories' as any).select('*').order('order_position'),
+                (supabase.from('documents' as any) as any)
+                    .select('*, departments(name,color), document_categories(name)')
+                    .order('created_at', { ascending: false }),
+                (supabase.from('departments' as any) as any)
+                    .select('*').eq('is_active', true).order('order_position'),
+                (supabase.from('document_categories' as any) as any)
+                    .select('*').order('order_position'),
             ]);
             if (docsRes.data) setDocuments(docsRes.data as Document[]);
             if (deptsRes.data) setDepartments(deptsRes.data as Department[]);
@@ -83,71 +98,115 @@ export const DocumentsManagement = () => {
     };
 
     const filteredDocs = documents.filter(d => {
-        const matchSearch = !search || d.title.toLowerCase().includes(search.toLowerCase()) || d.uploader_name?.toLowerCase().includes(search.toLowerCase());
-        const matchDept = filterDept === 'all' || d.department_id === filterDept;
-        const matchYear = filterYear === 'all' || d.academic_year === filterYear;
+        const matchSearch = !search
+            || d.title.toLowerCase().includes(search.toLowerCase())
+            || d.uploader_name?.toLowerCase().includes(search.toLowerCase());
+        const matchDept   = filterDept   === 'all' || d.department_id === filterDept;
+        const matchYear   = filterYear   === 'all' || d.academic_year === filterYear;
         const matchStatus = filterStatus === 'all' || d.status === filterStatus;
         return matchSearch && matchDept && matchYear && matchStatus;
     });
 
+    // ─── Admin actions ────────────────────────────────────────────────
     const openAdd = () => {
+        if (!isAdmin) return;
         setEditDoc(null);
-        // auto-fill ผู้อัปโหลดจาก session
         setForm({ title: '', department_id: '', category_id: '', academic_year: '2568', status: 'draft', file_url: '', file_name: '', uploader_name: currentUserName, description: '' });
-        setShowDialog(true);
-    };
-
-    const handleFileUploaded = (result: FileUploadResult) => {
-        setForm(p => ({
-            ...p,
-            file_url: result.url,
-            file_name: result.name,
-        }));
+        setShowEditDialog(true);
     };
 
     const openEdit = (doc: Document) => {
+        if (!isAdmin) return;
         setEditDoc(doc);
-        setForm({ title: doc.title, department_id: doc.department_id || '', category_id: doc.category_id || '', academic_year: doc.academic_year || '2568', status: doc.status, file_url: doc.file_url || '', file_name: doc.file_name || '', uploader_name: doc.uploader_name || '', description: doc.description || '' });
-        setShowDialog(true);
+        setForm({
+            title: doc.title, department_id: doc.department_id || '',
+            category_id: doc.category_id || '', academic_year: doc.academic_year || '2568',
+            status: doc.status, file_url: doc.file_url || '', file_name: doc.file_name || '',
+            uploader_name: doc.uploader_name || '', description: doc.description || '',
+        });
+        setShowEditDialog(true);
+    };
+
+    const handleFileUploaded = (result: FileUploadResult) => {
+        setForm(p => ({ ...p, file_url: result.url, file_name: result.name }));
     };
 
     const handleSave = async () => {
+        if (!isAdmin) return;
         if (!form.title) { toast({ title: 'กรุณากรอกชื่อเอกสาร', variant: 'destructive' }); return; }
+        const payload: any = {
+            ...form,
+            uploader_user_id: editDoc
+                ? (editDoc as any).uploader_user_id
+                : (currentUser?.id || null),
+        };
+        setSaving(true);
         try {
+            let result;
             if (editDoc) {
-                await (supabase.from('documents' as any) as any).update(form).eq('id', editDoc.id);
-                toast({ title: 'อัปเดตเอกสารสำเร็จ' });
+                result = await (supabase.from('documents' as any) as any).update(payload).eq('id', editDoc.id);
             } else {
-                await (supabase.from('documents' as any) as any).insert([form]);
-                toast({ title: 'เพิ่มเอกสารสำเร็จ' });
+                result = await (supabase.from('documents' as any) as any).insert([payload]);
             }
-            setShowDialog(false);
+            if (result.error) {
+                toast({ title: 'บันทึกไม่สำเร็จ', description: result.error.message, variant: 'destructive' });
+                return;
+            }
+            toast({ title: editDoc ? 'อัปเดตเอกสารสำเร็จ ✅' : 'เพิ่มเอกสารสำเร็จ ✅' });
+            setShowEditDialog(false);
             fetchAll();
-        } catch (e) { toast({ title: 'เกิดข้อผิดพลาด', variant: 'destructive' }); }
+        } catch (e: any) {
+            toast({ title: 'เกิดข้อผิดพลาด', description: e?.message, variant: 'destructive' });
+        } finally {
+            setSaving(false);
+        }
     };
 
-    const handleDelete = async (id: string) => {
-        if (!confirm('ต้องการลบเอกสารนี้?')) return;
-        try {
-            await (supabase.from('documents' as any) as any).delete().eq('id', id);
-            toast({ title: 'ลบเอกสารสำเร็จ' });
-            fetchAll();
-        } catch (e) { toast({ title: 'เกิดข้อผิดพลาด', variant: 'destructive' }); }
+    const handleDelete = async (doc: Document) => {
+        if (!isAdmin) return;
+        if (!confirm(`ต้องการลบเอกสาร "${doc.title}"?`)) return;
+        const { error } = await (supabase.from('documents' as any) as any).delete().eq('id', doc.id);
+        if (error) { toast({ title: 'ลบไม่สำเร็จ', description: error.message, variant: 'destructive' }); return; }
+        toast({ title: 'ลบเอกสารสำเร็จ' });
+        fetchAll();
+    };
+
+    // ─── View-only action (ทุก role) ─────────────────────────────────
+    const openView = (doc: Document) => {
+        setViewDoc(doc);
+        setShowViewDialog(true);
     };
 
     const filteredCategories = categories.filter(c => !form.department_id || c.department_id === form.department_id);
 
     return (
         <div className="p-6">
+            {/* Header */}
             <div className="flex justify-between items-center mb-6">
                 <div>
-                    <h1 className="text-2xl font-bold">คลังเอกสารทั้งหมด</h1>
-                    <p className="text-muted-foreground text-sm">จัดการเอกสารของทุกฝ่ายงาน</p>
+                    <h1 className="text-2xl font-bold flex items-center gap-2">
+                        <FileText className="w-6 h-6 text-blue-600" /> คลังเอกสารทั้งหมด
+                    </h1>
+                    <p className="text-muted-foreground text-sm">
+                        {isAdmin
+                            ? 'จัดการเอกสารของทุกฝ่ายงาน (สิทธิ์เต็ม)'
+                            : 'ดูและดาวน์โหลดเอกสารของทุกฝ่ายงาน'}
+                    </p>
                 </div>
-                <Button onClick={openAdd} className="gap-2">
-                    <Plus className="w-4 h-4" /> เพิ่มเอกสาร
-                </Button>
+                {isAdmin && (
+                    <Button onClick={openAdd} className="gap-2">
+                        <Plus className="w-4 h-4" /> เพิ่มเอกสาร
+                    </Button>
+                )}
             </div>
+
+            {/* Permission Banner */}
+            {!isAdmin && (
+                <div className="flex items-center gap-2 mb-4 px-4 py-2.5 rounded-lg bg-amber-50 border border-amber-200 text-amber-800 text-sm">
+                    <Lock className="w-4 h-4 flex-shrink-0" />
+                    <span>คุณมีสิทธิ์ <strong>ดูและดาวน์โหลด</strong>เอกสารเท่านั้น การแก้ไขหรือลบสงวนไว้สำหรับผู้ดูแลระบบ</span>
+                </div>
+            )}
 
             {/* Filters */}
             <Card className="mb-4">
@@ -183,7 +242,7 @@ export const DocumentsManagement = () => {
                 </CardContent>
             </Card>
 
-            {/* Table */}
+            {/* Document Table */}
             <Card>
                 <CardContent className="p-0">
                     {loading ? (
@@ -198,13 +257,9 @@ export const DocumentsManagement = () => {
                             <table className="w-full">
                                 <thead className="bg-muted/50 border-b">
                                     <tr>
-                                        <th className="text-left p-3 text-sm font-medium text-muted-foreground">ชื่อเอกสาร</th>
-                                        <th className="text-left p-3 text-sm font-medium text-muted-foreground">ฝ่าย</th>
-                                        <th className="text-left p-3 text-sm font-medium text-muted-foreground">หมวดหมู่</th>
-                                        <th className="text-left p-3 text-sm font-medium text-muted-foreground">ปีการศึกษา</th>
-                                        <th className="text-left p-3 text-sm font-medium text-muted-foreground">ผู้อัปโหลด</th>
-                                        <th className="text-left p-3 text-sm font-medium text-muted-foreground">สถานะ</th>
-                                        <th className="text-left p-3 text-sm font-medium text-muted-foreground">จัดการ</th>
+                                        {['ชื่อเอกสาร', 'ฝ่าย', 'หมวดหมู่', 'ปีการศึกษา', 'ผู้อัปโหลด', 'สถานะ', 'จัดการ'].map(h => (
+                                            <th key={h} className="text-left p-3 text-sm font-medium text-muted-foreground">{h}</th>
+                                        ))}
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -212,9 +267,12 @@ export const DocumentsManagement = () => {
                                         <tr key={doc.id} className={`border-b hover:bg-muted/30 ${i % 2 === 0 ? '' : 'bg-muted/10'}`}>
                                             <td className="p-3">
                                                 <div className="flex items-center gap-2">
-                                                    <FileText className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                                                    <FileText className="w-4 h-4 text-blue-500 flex-shrink-0" />
                                                     <span className="font-medium text-sm">{doc.title}</span>
                                                 </div>
+                                                {doc.description && (
+                                                    <p className="text-xs text-muted-foreground mt-0.5 ml-6 truncate max-w-xs">{doc.description}</p>
+                                                )}
                                             </td>
                                             <td className="p-3 text-sm text-muted-foreground">{(doc.departments as any)?.name || '-'}</td>
                                             <td className="p-3 text-sm text-muted-foreground">{(doc.document_categories as any)?.name || '-'}</td>
@@ -227,17 +285,45 @@ export const DocumentsManagement = () => {
                                             </td>
                                             <td className="p-3">
                                                 <div className="flex gap-1">
+                                                    {/* ───── ดู (ทุก role) ───── */}
+                                                    <Button
+                                                        variant="ghost" size="icon"
+                                                        className="h-7 w-7 text-blue-600" title="ดูรายละเอียด"
+                                                        onClick={() => openView(doc)}
+                                                    >
+                                                        <Eye className="w-3.5 h-3.5" />
+                                                    </Button>
+
+                                                    {/* ───── ดาวน์โหลด (ทุก role) ───── */}
                                                     {doc.file_url && (
-                                                        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => window.open(doc.file_url, '_blank')}>
+                                                        <Button
+                                                            variant="ghost" size="icon"
+                                                            className="h-7 w-7 text-green-600" title="ดาวน์โหลด"
+                                                            onClick={() => window.open(doc.file_url, '_blank')}
+                                                        >
                                                             <Download className="w-3.5 h-3.5" />
                                                         </Button>
                                                     )}
-                                                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEdit(doc)}>
-                                                        <Eye className="w-3.5 h-3.5" />
-                                                    </Button>
-                                                    <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => handleDelete(doc.id)}>
-                                                        <Trash2 className="w-3.5 h-3.5" />
-                                                    </Button>
+
+                                                    {/* ───── แก้ไข + ลบ (admin only) ───── */}
+                                                    {isAdmin && (
+                                                        <>
+                                                            <Button
+                                                                variant="ghost" size="icon"
+                                                                className="h-7 w-7" title="แก้ไข"
+                                                                onClick={() => openEdit(doc)}
+                                                            >
+                                                                <Edit2 className="w-3.5 h-3.5" />
+                                                            </Button>
+                                                            <Button
+                                                                variant="ghost" size="icon"
+                                                                className="h-7 w-7 text-destructive" title="ลบ"
+                                                                onClick={() => handleDelete(doc)}
+                                                            >
+                                                                <Trash2 className="w-3.5 h-3.5" />
+                                                            </Button>
+                                                        </>
+                                                    )}
                                                 </div>
                                             </td>
                                         </tr>
@@ -249,91 +335,164 @@ export const DocumentsManagement = () => {
                 </CardContent>
             </Card>
 
-            {/* Add/Edit Dialog */}
-            <Dialog open={showDialog} onOpenChange={setShowDialog}>
+            {/* ─────────────────────────────────────────────────────────
+                View-Only Dialog (ทุก role)
+            ───────────────────────────────────────────────────────── */}
+            <Dialog open={showViewDialog} onOpenChange={setShowViewDialog}>
                 <DialogContent className="max-w-lg">
                     <DialogHeader>
-                        <DialogTitle>{editDoc ? 'แก้ไขเอกสาร' : 'เพิ่มเอกสาร'}</DialogTitle>
+                        <DialogTitle className="flex items-center gap-2">
+                            <FileText className="w-5 h-5 text-blue-600" />
+                            รายละเอียดเอกสาร
+                        </DialogTitle>
                     </DialogHeader>
-                    <div className="space-y-4">
-                        <div>
-                            <Label>ชื่อเอกสาร *</Label>
-                            <Input value={form.title} onChange={e => setForm(p => ({ ...p, title: e.target.value }))} placeholder="ชื่อเอกสาร" />
-                        </div>
-                        <div className="grid grid-cols-2 gap-3">
-                            <div>
-                                <Label>ฝ่ายงาน</Label>
-                                <Select value={form.department_id} onValueChange={v => setForm(p => ({ ...p, department_id: v, category_id: '' }))}>
-                                    <SelectTrigger><SelectValue placeholder="เลือกฝ่าย" /></SelectTrigger>
-                                    <SelectContent>
-                                        {departments.map(d => <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>)}
-                                    </SelectContent>
-                                </Select>
+                    {viewDoc && (
+                        <div className="space-y-3 text-sm">
+                            <div className="grid grid-cols-3 gap-1">
+                                <span className="text-muted-foreground col-span-1">ชื่อเอกสาร</span>
+                                <span className="font-medium col-span-2">{viewDoc.title}</span>
                             </div>
-                            <div>
-                                <Label>หมวดหมู่</Label>
-                                <Select value={form.category_id} onValueChange={v => setForm(p => ({ ...p, category_id: v }))}>
-                                    <SelectTrigger><SelectValue placeholder="เลือกหมวด" /></SelectTrigger>
-                                    <SelectContent>
-                                        {filteredCategories.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
-                                    </SelectContent>
-                                </Select>
+                            <div className="grid grid-cols-3 gap-1">
+                                <span className="text-muted-foreground">ฝ่ายงาน</span>
+                                <span className="col-span-2">{(viewDoc.departments as any)?.name || '-'}</span>
                             </div>
-                        </div>
-                        <div className="grid grid-cols-2 gap-3">
-                            <div>
-                                <Label>ปีการศึกษา</Label>
-                                <Select value={form.academic_year} onValueChange={v => setForm(p => ({ ...p, academic_year: v }))}>
-                                    <SelectTrigger><SelectValue /></SelectTrigger>
-                                    <SelectContent>
-                                        {['2568', '2567', '2566', '2565'].map(y => <SelectItem key={y} value={y}>{y}</SelectItem>)}
-                                    </SelectContent>
-                                </Select>
+                            <div className="grid grid-cols-3 gap-1">
+                                <span className="text-muted-foreground">หมวดหมู่</span>
+                                <span className="col-span-2">{(viewDoc.document_categories as any)?.name || '-'}</span>
                             </div>
-                            <div>
-                                <Label>สถานะ</Label>
-                                <Select value={form.status} onValueChange={v => setForm(p => ({ ...p, status: v }))}>
-                                    <SelectTrigger><SelectValue /></SelectTrigger>
-                                    <SelectContent>
-                                        {Object.entries(STATUS_MAP).map(([k, v]) => <SelectItem key={k} value={k}>{v.label}</SelectItem>)}
-                                    </SelectContent>
-                                </Select>
+                            <div className="grid grid-cols-3 gap-1">
+                                <span className="text-muted-foreground">ปีการศึกษา</span>
+                                <span className="col-span-2">{viewDoc.academic_year}</span>
                             </div>
-                        </div>
-                        <div>
-                            <Label>ผู้อัปโหลด</Label>
-                            <Input
-                                value={form.uploader_name}
-                                readOnly={!editDoc}
-                                onChange={e => setForm(p => ({ ...p, uploader_name: e.target.value }))}
-                                placeholder="ชื่อผู้อัปโหลด"
-                                className={!editDoc ? 'bg-muted cursor-not-allowed' : ''}
-                            />
-                            {!editDoc && currentUserName && (
-                                <p className="text-xs text-muted-foreground mt-1">✅ ใช้ชื่อจากบัญชีที่ login</p>
+                            <div className="grid grid-cols-3 gap-1">
+                                <span className="text-muted-foreground">ผู้อัปโหลด</span>
+                                <span className="col-span-2">{viewDoc.uploader_name || '-'}</span>
+                            </div>
+                            <div className="grid grid-cols-3 gap-1">
+                                <span className="text-muted-foreground">สถานะ</span>
+                                <span className="col-span-2">
+                                    <Badge variant={STATUS_MAP[viewDoc.status]?.variant || 'secondary'}>
+                                        {STATUS_MAP[viewDoc.status]?.label || viewDoc.status}
+                                    </Badge>
+                                </span>
+                            </div>
+                            {viewDoc.description && (
+                                <div className="grid grid-cols-3 gap-1">
+                                    <span className="text-muted-foreground">หมายเหตุ</span>
+                                    <span className="col-span-2">{viewDoc.description}</span>
+                                </div>
                             )}
+                            <div className="grid grid-cols-3 gap-1">
+                                <span className="text-muted-foreground">วันที่อัปโหลด</span>
+                                <span className="col-span-2">
+                                    {new Date(viewDoc.created_at).toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric' })}
+                                </span>
+                            </div>
                         </div>
-                        <div>
-                            <Label>ไฟล์เอกสาร</Label>
-                            <FileUpload
-                                onUploadComplete={handleFileUploaded}
-                                currentFile={form.file_url ? { url: form.file_url, name: form.file_name || 'ไฟล์เอกสาร' } : undefined}
-                                bucket="school-images"
-                                folder="documents"
-                                maxSizeMB={20}
-                            />
-                        </div>
-                        <div>
-                            <Label>หมายเหตุ</Label>
-                            <Textarea value={form.description} onChange={e => setForm(p => ({ ...p, description: e.target.value }))} placeholder="รายละเอียดเพิ่มเติม" rows={2} />
-                        </div>
-                    </div>
+                    )}
                     <DialogFooter>
-                        <Button variant="outline" onClick={() => setShowDialog(false)}>ยกเลิก</Button>
-                        <Button onClick={handleSave}>{editDoc ? 'บันทึก' : 'เพิ่ม'}</Button>
+                        <Button variant="outline" onClick={() => setShowViewDialog(false)}>ปิด</Button>
+                        {viewDoc?.file_url && (
+                            <Button onClick={() => window.open(viewDoc.file_url, '_blank')} className="gap-2">
+                                <Download className="w-4 h-4" /> ดาวน์โหลด
+                            </Button>
+                        )}
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
+
+            {/* ─────────────────────────────────────────────────────────
+                Admin Edit/Add Dialog
+            ───────────────────────────────────────────────────────── */}
+            {isAdmin && (
+                <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>
+                    <DialogContent className="max-w-lg">
+                        <DialogHeader>
+                            <DialogTitle>{editDoc ? 'แก้ไขเอกสาร' : 'เพิ่มเอกสาร'}</DialogTitle>
+                        </DialogHeader>
+                        <div className="space-y-4">
+                            <div>
+                                <Label>ชื่อเอกสาร *</Label>
+                                <Input value={form.title} onChange={e => setForm(p => ({ ...p, title: e.target.value }))} placeholder="ชื่อเอกสาร" />
+                            </div>
+                            <div className="grid grid-cols-2 gap-3">
+                                <div>
+                                    <Label>ฝ่ายงาน</Label>
+                                    <Select value={form.department_id} onValueChange={v => setForm(p => ({ ...p, department_id: v, category_id: '' }))}>
+                                        <SelectTrigger><SelectValue placeholder="เลือกฝ่าย" /></SelectTrigger>
+                                        <SelectContent>
+                                            {departments.map(d => <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>)}
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                                <div>
+                                    <Label>หมวดหมู่</Label>
+                                    <Select value={form.category_id} onValueChange={v => setForm(p => ({ ...p, category_id: v }))}>
+                                        <SelectTrigger><SelectValue placeholder="เลือกหมวด" /></SelectTrigger>
+                                        <SelectContent>
+                                            {filteredCategories.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                            </div>
+                            <div className="grid grid-cols-2 gap-3">
+                                <div>
+                                    <Label>ปีการศึกษา</Label>
+                                    <Select value={form.academic_year} onValueChange={v => setForm(p => ({ ...p, academic_year: v }))}>
+                                        <SelectTrigger><SelectValue /></SelectTrigger>
+                                        <SelectContent>
+                                            {['2568', '2567', '2566', '2565'].map(y => <SelectItem key={y} value={y}>{y}</SelectItem>)}
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                                <div>
+                                    <Label>สถานะ</Label>
+                                    <Select value={form.status} onValueChange={v => setForm(p => ({ ...p, status: v }))}>
+                                        <SelectTrigger><SelectValue /></SelectTrigger>
+                                        <SelectContent>
+                                            {Object.entries(STATUS_MAP).map(([k, v]) => <SelectItem key={k} value={k}>{v.label}</SelectItem>)}
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                            </div>
+                            <div>
+                                <Label>ผู้อัปโหลด</Label>
+                                <Input
+                                    value={form.uploader_name}
+                                    readOnly={!editDoc}
+                                    onChange={e => setForm(p => ({ ...p, uploader_name: e.target.value }))}
+                                    placeholder="ชื่อผู้อัปโหลด"
+                                    className={!editDoc ? 'bg-muted cursor-not-allowed' : ''}
+                                />
+                                {!editDoc && currentUserName && (
+                                    <p className="text-xs text-green-600 mt-1">✅ ใช้ชื่อจากบัญชีที่ login</p>
+                                )}
+                            </div>
+                            <div>
+                                <Label>ไฟล์เอกสาร</Label>
+                                <FileUpload
+                                    onUploadComplete={handleFileUploaded}
+                                    currentFile={form.file_url ? { url: form.file_url, name: form.file_name || 'ไฟล์เอกสาร' } : undefined}
+                                    bucket="school-images"
+                                    folder="documents"
+                                    maxSizeMB={20}
+                                    canRemoveFile={true}
+                                />
+                            </div>
+                            <div>
+                                <Label>หมายเหตุ</Label>
+                                <Textarea value={form.description} onChange={e => setForm(p => ({ ...p, description: e.target.value }))} placeholder="รายละเอียดเพิ่มเติม" rows={2} />
+                            </div>
+                        </div>
+                        <DialogFooter>
+                            <Button variant="outline" onClick={() => setShowEditDialog(false)} disabled={saving}>ยกเลิก</Button>
+                            <Button onClick={handleSave} disabled={saving}>
+                                {saving ? 'กำลังบันทึก...' : editDoc ? 'บันทึก' : 'เพิ่ม'}
+                            </Button>
+                        </DialogFooter>
+                    </DialogContent>
+                </Dialog>
+            )}
         </div>
     );
 };

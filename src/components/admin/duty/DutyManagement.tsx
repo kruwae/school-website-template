@@ -14,7 +14,8 @@ import {
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
-import { useStaffList } from '@/hooks/useStaffList';
+import { getCurrentUser } from '@/lib/auth';
+import { usePermissions } from '@/hooks/usePermissions';
 
 interface DutyRecord {
     id: string;
@@ -41,7 +42,20 @@ const STATUS_MAP: Record<string, string> = {
 
 export const DutyManagement = () => {
     const { toast } = useToast();
-    const { staffList } = useStaffList();
+    const currentUser = getCurrentUser();
+    const { role } = usePermissions();
+    const currentUserName = currentUser?.full_name || '';
+    const currentUserPosition = (currentUser as any)?.position || '';
+
+    // เจ้าของบันทึก หรือ admin/director สามารถแก้ไข/ลบได้
+    // → ยกเว้น: สถานะ verified/approved (ตรวจสอบแล้ว/อนุมัติแล้ว) → ล็อคทุกคน
+    const canModify = (r: DutyRecord): boolean => {
+        if (r.status === 'verified' || r.status === 'approved') return false;  // ตรวจสอบ/อนุมัติแล้ว — ห้ามแก้ไข/ลบทุกคน
+        if (!currentUser) return false;
+        if (role === 'admin' || role === 'director' || role === 'deputy_director') return true;
+        return r.recorder_name === currentUserName;
+    };
+
     const [records, setRecords] = useState<DutyRecord[]>([]);
     const [loading, setLoading] = useState(true);
     const [filterMonth, setFilterMonth] = useState('');
@@ -51,8 +65,8 @@ export const DutyManagement = () => {
         duty_date: new Date().toISOString().split('T')[0],
         duty_shift: 'morning',
         duty_shift_label: 'เวรเช้า',
-        recorder_name: '',
-        recorder_position: '',
+        recorder_name: currentUserName,
+        recorder_position: currentUserPosition,
         students_present: 0,
         students_absent: 0,
         incidents: '',
@@ -78,7 +92,8 @@ export const DutyManagement = () => {
         setForm({
             duty_date: new Date().toISOString().split('T')[0],
             duty_shift: 'morning', duty_shift_label: 'เวรเช้า',
-            recorder_name: '', recorder_position: '',
+            recorder_name: currentUserName,
+            recorder_position: currentUserPosition,
             students_present: 0, students_absent: 0,
             incidents: '', actions_taken: '', remarks: '', status: 'recorded',
         });
@@ -176,12 +191,25 @@ export const DutyManagement = () => {
                                             </td>
                                             <td className="p-3">
                                                 <div className="flex gap-1">
-                                                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEdit(r)}>
-                                                        <Edit2 className="w-3.5 h-3.5" />
-                                                    </Button>
-                                                    <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => handleDelete(r.id)}>
-                                                        <Trash2 className="w-3.5 h-3.5" />
-                                                    </Button>
+                                                    {r.status === 'verified' || r.status === 'approved' ? (
+                                                        <span
+                                                            className="text-xs text-muted-foreground px-1"
+                                                            title={r.status === 'approved' ? 'อนุมัติแล้ว — ไม่สามารถแก้ไขหรือลบได้' : 'ตรวจสอบแล้ว — ไม่สามารถแก้ไขหรือลบได้'}
+                                                        >
+                                                            🔒
+                                                        </span>
+                                                    ) : canModify(r) ? (
+                                                        <>
+                                                            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEdit(r)} title="แก้ไข">
+                                                                <Edit2 className="w-3.5 h-3.5" />
+                                                            </Button>
+                                                            <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => handleDelete(r.id)} title="ลบ">
+                                                                <Trash2 className="w-3.5 h-3.5" />
+                                                            </Button>
+                                                        </>
+                                                    ) : (
+                                                        <span className="text-xs text-muted-foreground px-2" title="เฉพาะเจ้าของบันทึกเท่านั้น">–</span>
+                                                    )}
                                                 </div>
                                             </td>
                                         </tr>
@@ -216,24 +244,19 @@ export const DutyManagement = () => {
                         </div>
                         <div>
                             <Label>ผู้บันทึกเวร *</Label>
-                            <Select
+                            {/* Auto-fill จาก session — readonly เมื่อเพิ่มใหม่ */}
+                            <Input
                                 value={form.recorder_name}
-                                onValueChange={(v) => {
-                                    const found = staffList.find(s => s.name === v);
-                                    setForm(p => ({ ...p, recorder_name: v, recorder_position: found?.position || p.recorder_position }));
-                                }}
-                            >
-                                <SelectTrigger><SelectValue placeholder="เลือกผู้บันทึก" /></SelectTrigger>
-                                <SelectContent>
-                                    {staffList.map(s => (
-                                        <SelectItem key={s.id} value={s.name}>
-                                            {s.name} — {s.position}
-                                        </SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
+                                readOnly={!editRecord}
+                                onChange={e => setForm(p => ({ ...p, recorder_name: e.target.value }))}
+                                placeholder="ชื่อผู้บันทึก"
+                                className={!editRecord ? 'bg-muted cursor-not-allowed' : ''}
+                            />
                             {form.recorder_position && (
                                 <p className="text-xs text-muted-foreground mt-1">ตำแหน่ง: {form.recorder_position}</p>
+                            )}
+                            {!editRecord && currentUserName && (
+                                <p className="text-xs text-muted-foreground mt-1">✅ ใช้ชื่อจากบัญชีที่ login</p>
                             )}
                         </div>
                         <div className="grid grid-cols-2 gap-3">

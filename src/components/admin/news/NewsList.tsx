@@ -30,6 +30,7 @@ interface NewsListProps {
     onDelete: (id: string) => void;
     onTogglePublish: (item: NewsItem) => void;
     onReorder: (items: NewsItem[]) => void;
+    canManageNews: (item: NewsItem) => boolean;
 }
 
 const SortableNewsItem = ({
@@ -37,11 +38,13 @@ const SortableNewsItem = ({
     onEdit,
     onDelete,
     onTogglePublish,
+    canManage,
 }: {
     item: NewsItem;
     onEdit: () => void;
     onDelete: () => void;
     onTogglePublish: () => void;
+    canManage: boolean;
 }) => {
     const {
         attributes,
@@ -130,26 +133,32 @@ const SortableNewsItem = ({
 
             {/* Actions */}
             <div className="flex items-center gap-2">
-                <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={onTogglePublish}
-                    title={item.published ? 'ยกเลิกการเผยแพร่' : 'เผยแพร่'}
-                >
-                    {item.published ? 'ซ่อน' : 'เผยแพร่'}
-                </Button>
-                <Button variant="outline" size="icon" onClick={onEdit} title="แก้ไข">
-                    <Edit className="w-4 h-4" />
-                </Button>
-                <Button variant="outline" size="icon" onClick={onDelete} title="ลบ">
-                    <Trash2 className="w-4 h-4 text-destructive" />
-                </Button>
+                {canManage ? (
+                    <>
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={onTogglePublish}
+                            title={item.published ? 'ยกเลิกการเผยแพร่' : 'เผยแพร่'}
+                        >
+                            {item.published ? 'ซ่อน' : 'เผยแพร่'}
+                        </Button>
+                        <Button variant="outline" size="icon" onClick={onEdit} title="แก้ไข">
+                            <Edit className="w-4 h-4" />
+                        </Button>
+                        <Button variant="outline" size="icon" onClick={onDelete} title="ลบ">
+                            <Trash2 className="w-4 h-4 text-destructive" />
+                        </Button>
+                    </>
+                ) : (
+                    <span className="text-xs text-muted-foreground px-2">ดูได้อย่างเดียว</span>
+                )}
             </div>
         </div>
     );
 };
 
-export const NewsList = ({ items, onEdit, onDelete, onTogglePublish, onReorder }: NewsListProps) => {
+export const NewsList = ({ items, onEdit, onDelete, onTogglePublish, onReorder, canManageNews }: NewsListProps) => {
     const [localItems, setLocalItems] = useState(items);
     const [deleteId, setDeleteId] = useState<string | null>(null);
 
@@ -197,6 +206,7 @@ export const NewsList = ({ items, onEdit, onDelete, onTogglePublish, onReorder }
                                 onEdit={() => onEdit(item)}
                                 onDelete={() => setDeleteId(item.id)}
                                 onTogglePublish={() => onTogglePublish(item)}
+                                canManage={canManageNews(item)}
                             />
                         ))}
                     </div>

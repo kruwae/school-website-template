@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Plus, FileText, Download, Trash2, FolderOpen } from 'lucide-react';
+import { Plus, FileText, Download, Trash2, FolderOpen, Users } from 'lucide-react';
 import {
     Select, SelectContent, SelectItem, SelectTrigger, SelectValue
 } from '@/components/ui/select';
@@ -27,6 +27,7 @@ interface Document {
     file_url: string;
     file_name: string;
     uploader_name: string;
+    uploader_user_id: string | null;
     description: string;
     created_at: string;
     document_categories?: { name: string };
@@ -52,6 +53,13 @@ export const DepartmentDocuments = ({ deptCode, deptName, color }: Props) => {
     const currentUser = getCurrentUser();
     const currentUserName = currentUser?.full_name || '';
 
+    /** เจ้าของไฟล์หรือ admin เท่านั้นที่ลบได้ */
+    const canDelete = (doc: Document): boolean => {
+        if (!currentUser) return false;
+        if (currentUser.role === 'admin') return true;
+        return doc.uploader_user_id === currentUser.id;
+    };
+
     const [documents, setDocuments] = useState<Document[]>([]);
     const [categories, setCategories] = useState<Category[]>([]);
     const [deptId, setDeptId] = useState<string>('');
@@ -70,19 +78,60 @@ export const DepartmentDocuments = ({ deptCode, deptName, color }: Props) => {
     const fetchDeptAndDocs = async () => {
         setLoading(true);
         try {
-            const { data: deptData } = await (supabase.from('departments' as any) as any).select('id').eq('code', deptCode).single();
+            const { data: deptData } = await (supabase.from('departments' as any) as any)
+                .select('id').eq('code', deptCode).single();
             if (!deptData) return;
             const id = deptData.id;
             setDeptId(id);
 
+            // ตรวจสอบ role — dept_head เห็นเฉพาะเอกสารสมาชิกกลุ่มงานตน
+            const user = getCurrentUser();
+            let memberUserIds: string[] | null = null;
+
+            if (user?.role === 'dept_head') {
+                // หา work_groups ที่ user เป็น supervisor
+                const { data: wgData } = await (supabase.from('work_groups' as any) as any)
+                    .select('id')
+                    .eq('supervisor_id', user.id)
+                    .eq('department_id', id);
+
+                if (wgData && wgData.length > 0) {
+                    const groupIds = wgData.map((g: any) => g.id);
+                    // หา members ของกลุ่มงานเหล่านั้น
+                    const { data: memberData } = await (supabase.from('work_group_members' as any) as any)
+                        .select('user_id')
+                        .in('work_group_id', groupIds);
+                    if (memberData) {
+                        memberUserIds = [...new Set(memberData.map((m: any) => m.user_id))] as string[];
+                    }
+                }
+            }
+
+            // สร้าง query — ถ้า dept_head มี members ให้กรองด้วย uploader_user_id
+            // ถ้าไม่มีก็แสดงทั้งฝ่าย (admin/director/deputy_director)
+            let docsQuery = (supabase.from('documents' as any) as any)
+                .select('*, document_categories(name)')
+                .eq('department_id', id)
+                .order('created_at', { ascending: false });
+
             const [docsRes, catsRes] = await Promise.all([
-                (supabase.from('documents' as any) as any)
-                    .select('*, document_categories(name)')
-                    .eq('department_id', id)
-                    .order('created_at', { ascending: false }),
-                (supabase.from('document_categories' as any) as any).select('*').eq('department_id', id).order('order_position'),
+                docsQuery,
+                (supabase.from('document_categories' as any) as any)
+                    .select('*').eq('department_id', id).order('order_position'),
             ]);
-            if (docsRes.data) setDocuments(docsRes.data);
+
+            let docs = docsRes.data || [];
+
+            // กรองฝั่ง client ถ้า dept_head และมีรายชื่อสมาชิก
+            if (memberUserIds && memberUserIds.length > 0) {
+                docs = docs.filter((d: any) =>
+                    memberUserIds!.includes(d.uploader_user_id) ||
+                    // fallback: ถ้ายังไม่มี uploader_user_id ให้แสดงทั้งหมดในฝ่าย
+                    !d.uploader_user_id
+                );
+            }
+
+            setDocuments(docs);
             if (catsRes.data) setCategories(catsRes.data);
         } catch (e) { console.error(e); }
         finally { setLoading(false); }
@@ -106,23 +155,38 @@ export const DepartmentDocuments = ({ deptCode, deptName, color }: Props) => {
 
     const handleSave = async () => {
         if (!form.title) { toast({ title: 'กรุณากรอกชื่อเอกสาร', variant: 'destructive' }); return; }
-        const payload = { ...form, department_id: deptId };
+        const payload: any = {
+            ...form,
+            department_id: deptId,
+            uploader_user_id: editDoc ? editDoc.uploader_user_id : (currentUser?.id || null),
+        };
         try {
             if (editDoc) {
-                await (supabase.from('documents' as any) as any).update(payload).eq('id', editDoc.id);
+                const { error } = await (supabase.from('documents' as any) as any)
+                    .update(payload).eq('id', editDoc.id);
+                if (error) throw error;
                 toast({ title: 'อัปเดตสำเร็จ' });
             } else {
-                await (supabase.from('documents' as any) as any).insert([payload]);
+                const { error } = await (supabase.from('documents' as any) as any)
+                    .insert([payload]);
+                if (error) throw error;
                 toast({ title: 'เพิ่มเอกสารสำเร็จ' });
             }
             setShowDialog(false);
             fetchDeptAndDocs();
-        } catch (e) { toast({ title: 'เกิดข้อผิดพลาด', variant: 'destructive' }); }
+        } catch (e: any) {
+            console.error('[handleSave] error:', e);
+            toast({ title: 'เกิดข้อผิดพลาด', description: e?.message || 'ไม่สามารถบันทึกได้', variant: 'destructive' });
+        }
     };
 
-    const handleDelete = async (id: string) => {
+    const handleDelete = async (doc: Document) => {
+        if (!canDelete(doc)) {
+            toast({ title: 'ไม่มีสิทธิ์ลบเอกสารนี้', description: 'เฉพาะเจ้าของไฟล์หรือ admin เท่านั้น', variant: 'destructive' });
+            return;
+        }
         if (!confirm('ต้องการลบเอกสารนี้?')) return;
-        await (supabase.from('documents' as any) as any).delete().eq('id', id);
+        await (supabase.from('documents' as any) as any).delete().eq('id', doc.id);
         toast({ title: 'ลบสำเร็จ' });
         fetchDeptAndDocs();
     };
@@ -144,7 +208,15 @@ export const DepartmentDocuments = ({ deptCode, deptName, color }: Props) => {
                     </div>
                     <div>
                         <h1 className="text-xl font-bold">{deptName}</h1>
-                        <p className="text-sm text-muted-foreground">เอกสารและรายงาน</p>
+                        <div className="flex items-center gap-2 mt-0.5">
+                            <p className="text-sm text-muted-foreground">เอกสารและรายงาน</p>
+                            {getCurrentUser()?.role === 'dept_head' && (
+                                <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 bg-purple-100 text-purple-700 rounded-full font-medium">
+                                    <Users className="w-3 h-3" />
+                                    กลุ่มงานของฉัน
+                                </span>
+                            )}
+                        </div>
                     </div>
                 </div>
                 <Button onClick={openAdd} className="gap-2">
@@ -207,13 +279,15 @@ export const DepartmentDocuments = ({ deptCode, deptName, color }: Props) => {
                                                     {STATUS_MAP[doc.status]?.label || doc.status}
                                                 </Badge>
                                                 {doc.file_url && (
-                                                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => window.open(doc.file_url, '_blank')}>
+                                                    <Button variant="ghost" size="icon" className="h-7 w-7" title="ดาวน์โหลด" onClick={() => window.open(doc.file_url, '_blank')}>
                                                         <Download className="w-3.5 h-3.5" />
                                                     </Button>
                                                 )}
-                                                <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => handleDelete(doc.id)}>
-                                                    <Trash2 className="w-3.5 h-3.5" />
-                                                </Button>
+                                                {canDelete(doc) && (
+                                                    <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" title="ลบ" onClick={() => handleDelete(doc)}>
+                                                        <Trash2 className="w-3.5 h-3.5" />
+                                                    </Button>
+                                                )}
                                             </div>
                                         </div>
                                     ))}
@@ -276,6 +350,7 @@ export const DepartmentDocuments = ({ deptCode, deptName, color }: Props) => {
                                 bucket="school-images"
                                 folder="documents"
                                 maxSizeMB={20}
+                                canRemoveFile={!editDoc || canDelete(editDoc)}
                             />
                         </div>
                         <div>

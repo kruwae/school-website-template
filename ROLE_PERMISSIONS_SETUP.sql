@@ -30,9 +30,12 @@ CREATE TABLE IF NOT EXISTS public.work_groups (
 );
 
 ALTER TABLE public.work_groups ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "WorkGroups readable" ON public.work_groups FOR SELECT USING (true);
-CREATE POLICY "WorkGroups manageable" ON public.work_groups FOR ALL USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS "WorkGroups readable"   ON public.work_groups;
+DROP POLICY IF EXISTS "WorkGroups manageable" ON public.work_groups;
+CREATE POLICY "WorkGroups readable"   ON public.work_groups FOR SELECT USING (true);
+CREATE POLICY "WorkGroups manageable" ON public.work_groups FOR ALL    USING (true) WITH CHECK (true);
 
+DROP TRIGGER IF EXISTS trg_workgroups_updated_at ON public.work_groups;
 CREATE TRIGGER trg_workgroups_updated_at
   BEFORE UPDATE ON public.work_groups
   FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
@@ -53,8 +56,10 @@ CREATE TABLE IF NOT EXISTS public.work_group_members (
 );
 
 ALTER TABLE public.work_group_members ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "WorkGroupMembers readable" ON public.work_group_members FOR SELECT USING (true);
-CREATE POLICY "WorkGroupMembers manageable" ON public.work_group_members FOR ALL USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS "WorkGroupMembers readable"   ON public.work_group_members;
+DROP POLICY IF EXISTS "WorkGroupMembers manageable" ON public.work_group_members;
+CREATE POLICY "WorkGroupMembers readable"   ON public.work_group_members FOR SELECT USING (true);
+CREATE POLICY "WorkGroupMembers manageable" ON public.work_group_members FOR ALL    USING (true) WITH CHECK (true);
 
 CREATE INDEX IF NOT EXISTS idx_wgm_group  ON public.work_group_members(work_group_id);
 CREATE INDEX IF NOT EXISTS idx_wgm_user   ON public.work_group_members(user_id);
@@ -75,8 +80,10 @@ CREATE TABLE IF NOT EXISTS public.user_menu_permissions (
 );
 
 ALTER TABLE public.user_menu_permissions ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "MenuPerms readable"   ON public.user_menu_permissions;
+DROP POLICY IF EXISTS "MenuPerms manageable" ON public.user_menu_permissions;
 CREATE POLICY "MenuPerms readable"   ON public.user_menu_permissions FOR SELECT USING (true);
-CREATE POLICY "MenuPerms manageable" ON public.user_menu_permissions FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "MenuPerms manageable" ON public.user_menu_permissions FOR ALL    USING (true) WITH CHECK (true);
 
 CREATE INDEX IF NOT EXISTS idx_menu_perms_user ON public.user_menu_permissions(user_id);
 

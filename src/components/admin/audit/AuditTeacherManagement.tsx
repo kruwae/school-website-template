@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import {
     Plus, Star, Trash2, ClipboardEdit, ChevronDown, ChevronUp,
-    FileText, Download, ExternalLink, FolderOpen, AlertCircle
+    FileText, Download, ExternalLink, FolderOpen, AlertCircle, Printer
 } from 'lucide-react';
 import {
     Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter
@@ -17,6 +17,7 @@ import {
 } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
+import { getCurrentUser } from '@/lib/auth';
 
 // ---- หัวข้อประเมิน ----
 const EVAL_ITEMS = [
@@ -102,6 +103,8 @@ function formatDate(iso: string) {
 
 export const AuditTeacherManagement = () => {
     const { toast } = useToast();
+    const currentUser = getCurrentUser();
+
     const [evaluatees, setEvaluatees] = useState<Evaluatee[]>([]);
     const [committees, setCommittees] = useState<Committee[]>([]);
     const [evaluations, setEvaluations] = useState<Evaluation[]>([]);
@@ -127,7 +130,33 @@ export const AuditTeacherManagement = () => {
     // Evaluatee documents (for committee to review before scoring)
     const [evalueeDocs, setEvalueeDocs] = useState<EvaluateeDoc[]>([]);
     const [docsLoading, setDocsLoading] = useState(false);
-    const [appUsers, setAppUsers] = useState<{ id: string; full_name: string; username: string }[]>([]);
+    const [appUsers, setAppUsers] = useState<{ id: string; full_name: string; username: string; position?: string }[]>([]);
+
+    /**
+     * กรรมการแถวนั้นเป็นของ currentUser หรือไม่?
+     *
+     * 3-layer lookup (ไม่ต้อง re-login เพื่อให้ position เข้า session):
+     *   1. currentUser.position จาก session  (ถ้า login หลังเพิ่ม field)
+     *   2. position จาก appUsers list ที่โหลดแล้ว (fallback สำหรับ session เก่า)
+     *   3. committee.name === full_name (ถ้า admin กรอกชื่อจริงแทนตำแหน่ง)
+     */
+    const isMyCommittee = (committeeId: string): boolean => {
+        if (!currentUser) return false;
+        const committee = committees.find(c => c.id === committeeId);
+        if (!committee) return false;
+        // หา position ของ user ปัจจุบัน — จาก session ก่อน, ถ้าไม่มีดูจาก appUsers
+        const myPosition =
+            currentUser.position ||
+            appUsers.find(u => u.id === currentUser.id)?.position ||
+            null;
+        return (
+            (!!myPosition && committee.name === myPosition) ||
+            committee.name === currentUser.full_name
+        );
+    };
+
+    const [showPrintDialog, setShowPrintDialog] = useState(false);
+    const [printEvaluatee, setPrintEvaluatee] = useState<Evaluatee | null>(null);
 
     useEffect(() => { fetchAll(); }, [filterYear]);
 
@@ -146,7 +175,7 @@ export const AuditTeacherManagement = () => {
                 (supabase.from('departments' as any) as any)
                     .select('id,name').eq('is_active', true),
                 (supabase.from('app_users' as any) as any)
-                    .select('id,full_name,username').eq('is_active', true),
+                    .select('id,full_name,username,position').eq('is_active', true),
             ]);
             if (evaleeRes.data) setEvaluatees(evaleeRes.data);
             if (comRes.data)   setCommittees(comRes.data);
@@ -157,28 +186,26 @@ export const AuditTeacherManagement = () => {
         finally { setLoading(false); }
     };
 
-    /** Fetch documents submitted by this evaluatee (matched by user_id) */
+    /** Fetch documents submitted by this evaluatee (matched by uploader_user_id UUID) */
     const fetchEvalueeDocs = async (evaluatee: Evaluatee) => {
         setDocsLoading(true);
         setEvalueeDocs([]);
         try {
-            if (!evaluatee.user_id) {
-                // Try to match by name from app_users
+            // หา UUID ของผู้รับการประเมิน — จาก user_id ที่ link ไว้ หรือ match ชื่อ
+            let userId = evaluatee.user_id || null;
+            if (!userId) {
                 const matched = appUsers.find(u => u.full_name === evaluatee.name);
-                if (!matched) { setDocsLoading(false); return; }
-
-                const { data } = await (supabase.from('documents' as any) as any)
-                    .select('id,title,file_url,file_name,file_type,file_size,document_type,status,created_at')
-                    .eq('uploader_id', matched.id)
-                    .order('created_at', { ascending: false });
-                if (data) setEvalueeDocs(data as EvaluateeDoc[]);
-            } else {
-                const { data } = await (supabase.from('documents' as any) as any)
-                    .select('id,title,file_url,file_name,file_type,file_size,document_type,status,created_at')
-                    .eq('uploader_id', evaluatee.user_id)
-                    .order('created_at', { ascending: false });
-                if (data) setEvalueeDocs(data as EvaluateeDoc[]);
+                userId = matched?.id || null;
             }
+            if (!userId) { setDocsLoading(false); return; }
+
+            // ใช้ uploader_user_id (UUID FK) — คอลัมน์ที่เพิ่มโดย ROLE_PERMISSIONS_SETUP.sql
+            const { data, error } = await (supabase.from('documents' as any) as any)
+                .select('id,title,file_url,file_name,file_type,file_size,document_type,status,created_at')
+                .eq('uploader_user_id', userId)
+                .order('created_at', { ascending: false });
+            if (error) console.error('[fetchEvalueeDocs]', error);
+            if (data) setEvalueeDocs(data as EvaluateeDoc[]);
         } catch (e) { console.error(e); }
         finally { setDocsLoading(false); }
     };
@@ -215,6 +242,18 @@ export const AuditTeacherManagement = () => {
 
     const handleSaveScore = async () => {
         if (!selectedEvaluatee || !selectedCommitteeId) return;
+
+        // ── Guard: ตรวจสอบว่ากรรมการแถวนี้เป็นของ currentUser ──
+        if (!isMyCommittee(selectedCommitteeId)) {
+            const ownerName = committees.find(c => c.id === selectedCommitteeId)?.name || '';
+            toast({
+                title: 'ไม่มีสิทธิ์บันทึก',
+                description: `แถวนี้เป็นของ ${ownerName} คุณสามารถกรอกได้เฉพาะแถวของตัวเองเท่านั้น`,
+                variant: 'destructive',
+            });
+            return;
+        }
+
         const existing = evaluations.find(e =>
             e.evaluatee_id === selectedEvaluatee.id && e.committee_id === selectedCommitteeId
         );
@@ -319,34 +358,33 @@ export const AuditTeacherManagement = () => {
                                             <Star className="w-5 h-5 text-yellow-600" />
                                         </div>
                                         <div>
-                                            <p className="font-semibold text-sm">{eva.name}</p>
+                                            <p className="font-medium text-sm">{eva.name}</p>
                                             <p className="text-xs text-muted-foreground">
-                                                {POSITION_TYPES[eva.position_type] || eva.position_type} • {eva.position}
-                                                {(eva.departments as any)?.name && ` • ${(eva.departments as any).name}`}
+                                                {POSITION_TYPES[eva.position_type] || eva.position_type}
+                                                {eva.position ? ` • ${eva.position}` : ''}
+                                                {eva.departments?.name ? ` • ${eva.departments.name}` : ''}
                                             </p>
                                         </div>
                                     </div>
-                                    <div className="flex items-center gap-4">
-                                        <div className="text-right">
-                                            <p className="text-xs text-muted-foreground">{submittedCount}/{committees.length} กรรมการ</p>
-                                            {submittedCount > 0 && (
-                                                <p className={`text-sm font-bold ${grade.color}`}>
-                                                    {weightedScore.toFixed(1)} — {grade.grade}
-                                                </p>
-                                            )}
-                                        </div>
-                                        <div className="flex gap-1" onClick={e => e.stopPropagation()}>
-                                            <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive"
-                                                onClick={() => handleDeleteEvaluatee(eva.id)}>
-                                                <Trash2 className="w-3.5 h-3.5" />
-                                            </Button>
-                                        </div>
-                                        {isExpanded
-                                            ? <ChevronUp className="w-4 h-4 text-muted-foreground" />
-                                            : <ChevronDown className="w-4 h-4 text-muted-foreground" />}
+                                    <div className="flex items-center gap-2">
+                                        {submittedCount > 0 && (
+                                            <span className={`text-sm font-semibold ${grade.color}`}>
+                                                {weightedScore.toFixed(1)} — {grade.grade}
+                                            </span>
+                                        )}
+                                        <Badge variant="outline" className="text-xs">
+                                            {submittedCount}/{committees.length} กรรมการ
+                                        </Badge>
+                                        <Button
+                                            size="sm" variant="ghost"
+                                            className="h-7 w-7 p-0"
+                                            onClick={e => { e.stopPropagation(); handleDeleteEvaluatee(eva.id); }}
+                                        >
+                                            <Trash2 className="w-3.5 h-3.5 text-red-400" />
+                                        </Button>
+                                        {isExpanded ? <ChevronUp className="w-4 h-4 text-muted-foreground" /> : <ChevronDown className="w-4 h-4 text-muted-foreground" />}
                                     </div>
                                 </div>
-
                                 {isExpanded && (
                                     <div className="border-t px-4 pb-4">
                                         <p className="text-xs font-medium text-muted-foreground mt-3 mb-2">คะแนนจากกรรมการ</p>
@@ -358,11 +396,20 @@ export const AuditTeacherManagement = () => {
                                                     ? EVAL_ITEMS.reduce((s, item) => s + (parseFloat(ev[item.key]) || 0), 0) / EVAL_ITEMS.length
                                                     : null;
                                                 const g = avgScore !== null ? gradeLabel(avgScore) : null;
+
+                                                // ล็อค: กรอกได้เฉพาะกรรมการแถวของตัวเอง
+                                                const canScore = isMyCommittee(c.id);
+
                                                 return (
-                                                    <div key={c.id} className="flex items-center justify-between p-2.5 bg-muted/30 rounded-lg">
+                                                    <div key={c.id} className={`flex items-center justify-between p-2.5 rounded-lg ${
+                                                        canScore ? 'bg-yellow-50 border border-yellow-200' : 'bg-muted/30'
+                                                    }`}>
                                                         <div>
                                                             <span className="text-sm">{c.name}</span>
                                                             <Badge variant="outline" className="ml-2 text-xs">{c.weight_percent}%</Badge>
+                                                            {canScore && (
+                                                                <Badge className="ml-1 text-xs bg-yellow-200 text-yellow-800 border-0">คุณ</Badge>
+                                                            )}
                                                         </div>
                                                         <div className="flex items-center gap-2">
                                                             {submitted && g ? (
@@ -376,6 +423,7 @@ export const AuditTeacherManagement = () => {
                                                                 size="sm"
                                                                 variant={submitted ? 'outline' : 'default'}
                                                                 className="h-7 text-xs gap-1"
+                                                                disabled={!canScore}
                                                                 onClick={() => openScoreDialog(eva, c.id)}
                                                             >
                                                                 <ClipboardEdit className="w-3 h-3" />
@@ -388,15 +436,35 @@ export const AuditTeacherManagement = () => {
                                         </div>
                                         {submittedCount > 0 && (
                                             <div className="mt-3 p-3 bg-yellow-50 rounded-lg border border-yellow-200">
-                                                <p className="text-sm font-semibold text-yellow-800">
-                                                    ผลรวมถ่วงน้ำหนัก:{' '}
-                                                    <span className={gradeLabel(weightedScore).color}>
-                                                        {weightedScore.toFixed(2)} คะแนน — {gradeLabel(weightedScore).grade}
-                                                    </span>
-                                                </p>
-                                                <p className="text-xs text-yellow-600">
-                                                    {submittedCount} จาก {committees.length} กรรมการกรอกแล้ว
-                                                </p>
+                                                <div className="flex items-center justify-between">
+                                                    <div>
+                                                        <p className="text-sm font-semibold text-yellow-800">
+                                                            ผลรวมถ่วงน้ำหนัก:{' '}
+                                                            <span className={gradeLabel(weightedScore).color}>
+                                                                {weightedScore.toFixed(2)} คะแนน — {gradeLabel(weightedScore).grade}
+                                                            </span>
+                                                        </p>
+                                                        <p className="text-xs text-yellow-600">
+                                                            {submittedCount} จาก {committees.length} กรรมการกรอกแล้ว
+                                                        </p>
+                                                    </div>
+                                                    {/* ปุ่มพิมพ์ — แสดงเมื่อกรรมการครบทุกคน */}
+                                                    {committees.length > 0 && submittedCount >= committees.length && (
+                                                        <Button
+                                                            size="sm"
+                                                            variant="outline"
+                                                            className="gap-1.5 text-xs border-yellow-400 text-yellow-700 hover:bg-yellow-100"
+                                                            onClick={e => {
+                                                                e.stopPropagation();
+                                                                setPrintEvaluatee(eva);
+                                                                setShowPrintDialog(true);
+                                                            }}
+                                                        >
+                                                            <Printer className="w-3.5 h-3.5" />
+                                                            พิมพ์ผลคะแนน
+                                                        </Button>
+                                                    )}
+                                                </div>
                                             </div>
                                         )}
                                     </div>
@@ -622,8 +690,141 @@ export const AuditTeacherManagement = () => {
                     </div>
 
                     <DialogFooter className="mt-2">
+                        {selectedCommitteeId && !isMyCommittee(selectedCommitteeId) && (
+                            <p className="text-xs text-red-500 flex items-center gap-1 mr-auto">
+                                <AlertCircle className="w-3.5 h-3.5" />
+                                คุณไม่ใช่กรรมการในแถวนี้ ไม่สามารถบันทึกได้
+                            </p>
+                        )}
                         <Button variant="outline" onClick={() => setShowScoreDialog(false)}>ยกเลิก</Button>
-                        <Button onClick={handleSaveScore}>บันทึกคะแนน</Button>
+                        <Button
+                            onClick={handleSaveScore}
+                            disabled={!selectedCommitteeId || !isMyCommittee(selectedCommitteeId)}
+                        >
+                            บันทึกคะแนน
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            {/* ===== Print Results Dialog ===== */}
+            <Dialog open={showPrintDialog} onOpenChange={setShowPrintDialog}>
+                <DialogContent className="max-w-4xl max-h-[95vh] overflow-y-auto">
+                    <DialogHeader>
+                        <DialogTitle className="flex items-center gap-2">
+                            <Printer className="w-5 h-5" />
+                            ผลการประเมิน — {printEvaluatee?.name}
+                        </DialogTitle>
+                        <p className="text-sm text-muted-foreground">
+                            ปีการศึกษา {filterYear} •{' '}
+                            {POSITION_TYPES[printEvaluatee?.position_type || ''] || printEvaluatee?.position_type}
+                            {printEvaluatee?.position ? ` • ${printEvaluatee.position}` : ''}
+                        </p>
+                    </DialogHeader>
+
+                    {printEvaluatee && (() => {
+                        const myEvals = evaluations.filter(e => e.evaluatee_id === printEvaluatee.id && e.is_submitted);
+                        const weightedScore = computeWeightedScore(myEvals, committees);
+                        const grade = gradeLabel(weightedScore);
+                        const totalWeight = committees.reduce((s, c) => s + c.weight_percent, 0);
+
+                        return (
+                            <div id="print-area" className="mt-2 space-y-4 text-sm">
+                                {/* ผลรวม */}
+                                <div className={`p-4 rounded-xl border-2 text-center ${
+                                    grade.grade === 'ดีเด่น' ? 'bg-green-50 border-green-400' :
+                                    grade.grade === 'ดีมาก'  ? 'bg-blue-50 border-blue-400' :
+                                    grade.grade === 'ดี'     ? 'bg-indigo-50 border-indigo-400' :
+                                                               'bg-yellow-50 border-yellow-400'
+                                }`}>
+                                    <p className="text-xs text-muted-foreground mb-1">คะแนนรวมถ่วงน้ำหนัก ({committees.length} กรรมการ)</p>
+                                    <p className={`text-4xl font-bold ${grade.color}`}>{weightedScore.toFixed(2)}</p>
+                                    <p className={`text-lg font-semibold mt-1 ${grade.color}`}>{grade.grade}</p>
+                                </div>
+
+                                {/* รายละเอียดแต่ละกรรมการ */}
+                                {committees.map(c => {
+                                    const ev = myEvals.find(e => e.committee_id === c.id);
+                                    if (!ev) return (
+                                        <div key={c.id} className="p-3 bg-muted/30 rounded-lg border">
+                                            <p className="font-medium text-sm text-muted-foreground">
+                                                {c.name} <span className="ml-2 text-xs">({c.weight_percent}%)</span>
+                                            </p>
+                                            <p className="text-xs text-muted-foreground mt-1">ยังไม่กรอกคะแนน</p>
+                                        </div>
+                                    );
+                                    const avg = EVAL_ITEMS.reduce((s, item) => s + (parseFloat(ev[item.key]) || 0), 0) / EVAL_ITEMS.length;
+                                    const g = gradeLabel(avg);
+                                    const contribution = avg * (c.weight_percent / totalWeight);
+                                    // group items
+                                    const groups = EVAL_ITEMS.reduce((acc, item) => {
+                                        if (!acc[item.group]) acc[item.group] = [];
+                                        acc[item.group].push(item);
+                                        return acc;
+                                    }, {} as Record<string, typeof EVAL_ITEMS>);
+
+                                    return (
+                                        <div key={c.id} className="border rounded-xl overflow-hidden">
+                                            <div className="flex items-center justify-between px-4 py-2.5 bg-muted/40">
+                                                <span className="font-semibold text-sm">{c.name}</span>
+                                                <div className="flex items-center gap-3 text-sm">
+                                                    <span className="text-muted-foreground text-xs">น้ำหนัก {c.weight_percent}%</span>
+                                                    <span className={`font-bold ${g.color}`}>{avg.toFixed(2)} ({g.grade})</span>
+                                                    <span className="text-xs text-muted-foreground">→ {contribution.toFixed(2)} คะแนน</span>
+                                                </div>
+                                            </div>
+                                            <div className="px-4 py-2 space-y-3">
+                                                {Object.entries(groups).map(([groupName, items]) => (
+                                                    <div key={groupName}>
+                                                        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mt-2 mb-1">{groupName}</p>
+                                                        <div className="grid grid-cols-2 gap-1">
+                                                            {items.map(item => (
+                                                                <div key={item.key} className="flex items-center justify-between text-xs py-0.5">
+                                                                    <span className="text-muted-foreground flex-1 truncate">{item.label}</span>
+                                                                    <span className="font-medium ml-2 w-10 text-right">{parseFloat(ev[item.key] || '0').toFixed(1)}</span>
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                                {ev.remarks && (
+                                                    <p className="text-xs text-muted-foreground italic pt-1 border-t">
+                                                        ข้อเสนอแนะ: {ev.remarks}
+                                                    </p>
+                                                )}
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        );
+                    })()}
+
+                    <DialogFooter className="mt-4">
+                        <Button variant="outline" onClick={() => setShowPrintDialog(false)}>ปิด</Button>
+                        <Button
+                            className="gap-2"
+                            onClick={() => {
+                                const area = document.getElementById('print-area');
+                                if (!area) return;
+                                const html = `
+                                    <html><head><title>ผลการประเมิน — ${printEvaluatee?.name}</title>
+                                    <style>
+                                        body { font-family: 'Sarabun', sans-serif; font-size: 12px; padding: 20px; }
+                                        h1 { font-size: 16px; margin-bottom: 4px; }
+                                        .score { font-size: 36px; font-weight: bold; text-align: center; }
+                                        table { width: 100%; border-collapse: collapse; margin-top: 8px; }
+                                        th, td { border: 1px solid #ccc; padding: 4px 8px; }
+                                        th { background: #f5f5f5; }
+                                    </style></head>
+                                    <body>${area.innerHTML}</body></html>`;
+                                const win = window.open('', '_blank');
+                                if (win) { win.document.write(html); win.document.close(); win.print(); }
+                            }}
+                        >
+                            <Printer className="w-4 h-4" />
+                            พิมพ์
+                        </Button>
                     </DialogFooter>
                 </DialogContent>
             </Dialog>

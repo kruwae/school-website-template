@@ -7,7 +7,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import {
     Upload, FileText, LogOut, User, Clock, CheckCircle2,
-    Download, Trash2, AlertCircle, File, FilePlus, School
+    Download, Trash2, AlertCircle, File, FilePlus, School,
+    Loader2, ClipboardCheck
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
@@ -57,6 +58,12 @@ function formatDate(iso: string) {
     });
 }
 
+interface EvalStatus {
+    totalCommittees: number;   // จำนวนกรรมการทั้งหมด
+    submittedCount:  number;   // กรรมการที่กรอกแล้ว
+    statusLoading:   boolean;
+}
+
 const EvaluateePortal = () => {
     const navigate = useNavigate();
     const { toast } = useToast();
@@ -70,20 +77,73 @@ const EvaluateePortal = () => {
     const [docType, setDocType] = useState('self_evaluation');
     const [docTitle, setDocTitle] = useState('');
     const [dragOver, setDragOver] = useState(false);
+    const [evalStatus, setEvalStatus] = useState<EvalStatus>({
+        totalCommittees: 0, submittedCount: 0, statusLoading: true,
+    });
 
     useEffect(() => {
         const u = getCurrentUser();
         if (!u) { navigate('/admin'); return; }
         setUser(u);
         fetchMyDocs(u);
+        fetchEvalStatus(u);
     }, [navigate]);
+
+    /** ดึงสถานะการประเมิน (ไม่แสดงคะแนน — แค่บอกว่ากี่คนกรอกแล้ว) */
+    const fetchEvalStatus = async (u: AppUser) => {
+        setEvalStatus(s => ({ ...s, statusLoading: true }));
+        try {
+            // 1. หา evaluatee record ของ user นี้
+            let evaluateeId: string | null = null;
+
+            const { data: byUserId } = await (supabase.from('audit_evaluatees' as any) as any)
+                .select('id')
+                .eq('user_id', u.id)
+                .eq('is_active', true)
+                .limit(1);
+            evaluateeId = byUserId?.[0]?.id ?? null;
+
+            if (!evaluateeId) {
+                // fallback: match ชื่อ
+                const { data: byName } = await (supabase.from('audit_evaluatees' as any) as any)
+                    .select('id')
+                    .eq('name', u.full_name)
+                    .eq('is_active', true)
+                    .limit(1);
+                evaluateeId = byName?.[0]?.id ?? null;
+            }
+
+            // 2. นับจำนวนกรรมการทั้งหมด (ปีปัจจุบัน)
+            const { data: committees } = await (supabase.from('audit_committees' as any) as any)
+                .select('id')
+                .eq('academic_year', '2568')
+                .eq('is_active', true);
+            const totalCommittees = committees?.length ?? 0;
+
+            // 3. นับว่ากรรมการกรอกไปแล้วกี่คน
+            let submittedCount = 0;
+            if (evaluateeId && totalCommittees > 0) {
+                const { data: evals } = await (supabase.from('audit_evaluations' as any) as any)
+                    .select('id')
+                    .eq('evaluatee_id', evaluateeId)
+                    .eq('is_submitted', true)
+                    .eq('academic_year', '2568');
+                submittedCount = evals?.length ?? 0;
+            }
+
+            setEvalStatus({ totalCommittees, submittedCount, statusLoading: false });
+        } catch (e) {
+            console.error('[fetchEvalStatus]', e);
+            setEvalStatus(s => ({ ...s, statusLoading: false }));
+        }
+    };
 
     const fetchMyDocs = async (u: AppUser) => {
         setLoading(true);
         try {
             const { data } = await (supabase.from('documents' as any) as any)
                 .select('id, title, file_url, file_name, file_type, file_size, status, created_at, document_type')
-                .eq('uploader_id', u.id)
+                .eq('uploader_user_id', u.id)
                 .order('created_at', { ascending: false });
             if (data) setDocs(data as UploadedDoc[]);
         } catch (e) { console.error(e); }
@@ -142,7 +202,8 @@ const EvaluateePortal = () => {
                 file_name: file.name,
                 file_type: file.type,
                 file_size: file.size,
-                uploader_id: user.id,
+                uploader_id: user.id,        // TEXT column (legacy)
+                uploader_user_id: user.id,   // UUID FK column (ROLE_PERMISSIONS_SETUP.sql)
                 uploader_name: user.full_name,
                 status: 'draft',
                 academic_year: '2568',
@@ -244,6 +305,77 @@ const EvaluateePortal = () => {
                         </div>
                     </div>
                 </div>
+
+                {/* ===== สถานะการประเมิน ===== */}
+                {(() => {
+                    const { totalCommittees, submittedCount, statusLoading } = evalStatus;
+                    const allDone = totalCommittees > 0 && submittedCount >= totalCommittees;
+                    const inProgress = submittedCount > 0 && !allDone;
+                    const notStarted = submittedCount === 0;
+
+                    return (
+                        <div className={`rounded-2xl p-5 border shadow-sm ${
+                            allDone   ? 'bg-green-50  border-green-200' :
+                            inProgress ? 'bg-blue-50   border-blue-200' :
+                                         'bg-slate-50  border-slate-200'
+                        }`}>
+                            <div className="flex items-center gap-3">
+                                {statusLoading ? (
+                                    <Loader2 className="w-6 h-6 text-slate-400 animate-spin" />
+                                ) : allDone ? (
+                                    <ClipboardCheck className="w-6 h-6 text-green-600" />
+                                ) : (
+                                    <Clock className="w-6 h-6 text-blue-500" />
+                                )}
+                                <div className="flex-1">
+                                    <p className={`text-sm font-semibold ${
+                                        allDone ? 'text-green-800' : inProgress ? 'text-blue-800' : 'text-slate-600'
+                                    }`}>
+                                        {statusLoading ? 'กำลังตรวจสอบสถานะ...' :
+                                         allDone     ? 'ประเมินเสร็จสิ้นแล้ว ✅' :
+                                         inProgress  ? 'กำลังดำเนินการประเมิน...' :
+                                                       'รอเริ่มการประเมิน'}
+                                    </p>
+                                    {!statusLoading && totalCommittees > 0 && (
+                                        <p className={`text-xs mt-0.5 ${
+                                            allDone ? 'text-green-600' : 'text-blue-600'
+                                        }`}>
+                                            คณะกรรมการกรอกคะแนนแล้ว {submittedCount} จาก {totalCommittees} ท่าน
+                                        </p>
+                                    )}
+                                </div>
+                                {/* Progress bar */}
+                                {!statusLoading && totalCommittees > 0 && (
+                                    <div className="text-right">
+                                        <p className={`text-lg font-bold ${
+                                            allDone ? 'text-green-700' : 'text-blue-700'
+                                        }`}>
+                                            {submittedCount}/{totalCommittees}
+                                        </p>
+                                        <div className="w-20 h-1.5 bg-white/60 rounded-full overflow-hidden mt-1">
+                                            <div
+                                                className={`h-full rounded-full transition-all ${
+                                                    allDone ? 'bg-green-500' : 'bg-blue-500'
+                                                }`}
+                                                style={{ width: `${totalCommittees > 0 ? (submittedCount / totalCommittees) * 100 : 0}%` }}
+                                            />
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                            {allDone && (
+                                <p className="text-xs text-green-700 mt-3 pt-3 border-t border-green-200">
+                                    คณะกรรมการประเมินครบทุกท่านแล้ว ทางโรงเรียนจะแจ้งผลการประเมินให้ทราบในโอกาสต่อไป
+                                </p>
+                            )}
+                            {notStarted && !statusLoading && totalCommittees > 0 && (
+                                <p className="text-xs text-slate-500 mt-3 pt-3 border-t border-slate-200">
+                                    คณะกรรมการยังไม่เริ่มประเมิน กรุณารอและเตรียมเอกสารให้ครบถ้วน
+                                </p>
+                            )}
+                        </div>
+                    );
+                })()}
 
                 {/* Upload Section */}
                 <Card className="border-slate-200 shadow-sm">

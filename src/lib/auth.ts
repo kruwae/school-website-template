@@ -15,6 +15,7 @@ export interface AppUser {
   username: string;
   full_name: string;
   role: UserRole;
+  position?: string;  // ชื่อตำแหน่ง เช่น "หัวหน้าฝ่ายบริหารทั่วไป" — ใช้จับคู่ committee.name
   staff_id?: string;
   email?: string;
 }
@@ -35,7 +36,7 @@ export async function login(username: string, password: string): Promise<AppUser
   console.log('[auth] login attempt:', username, '| hash:', hashed);
 
   const { data, error } = await (supabase.from('app_users' as any) as any)
-    .select('id, username, full_name, role, staff_id, email, password_hash')
+    .select('id, username, full_name, role, position, staff_id, email, password_hash')
     .eq('username', username.trim())
     .eq('is_active', true)
     .single();
@@ -58,6 +59,7 @@ export async function login(username: string, password: string): Promise<AppUser
     username: data.username,
     full_name: data.full_name,
     role: data.role,
+    position: data.position ?? undefined,
     staff_id: data.staff_id,
     email: data.email,
   };

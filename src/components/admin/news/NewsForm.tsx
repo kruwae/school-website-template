@@ -12,6 +12,7 @@ import { useToast } from '@/hooks/use-toast';
 import { ImageUpload } from '../shared/ImageUpload';
 import { RichTextEditor } from '../shared/RichTextEditor';
 import type { NewsItem } from './NewsManagement';
+import { getCurrentUser } from '@/lib/auth';
 
 interface NewsFormProps {
     news?: NewsItem | null;
@@ -47,7 +48,7 @@ export const NewsForm = ({ news, onSuccess, onCancel }: NewsFormProps) => {
                 .order('name');
 
             if (error) throw error;
-            setCategories(data?.map((c) => c.name) || []);
+            setCategories((data as any[])?.map((c) => c.name as string) || []);
         } catch (error) {
             console.error('Error fetching categories:', error);
         }
@@ -79,10 +80,12 @@ export const NewsForm = ({ news, onSuccess, onCancel }: NewsFormProps) => {
                 });
             } else {
                 // Create new news
+                const currentUser = getCurrentUser();
                 const { error } = await supabase.from('news').insert({
                     ...dataToSave,
                     sort_order: 0,
                     views: 0,
+                    created_by_user_id: currentUser?.id || null,
                 });
 
                 if (error) throw error;

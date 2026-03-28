@@ -9,6 +9,7 @@ import { useToast } from '@/hooks/use-toast';
 import { NewsForm } from './NewsForm';
 import { NewsList } from './NewsList';
 import { deleteStorageImage } from '@/utils/storageUtils';
+import { getCurrentUser } from '@/lib/auth';
 
 export interface NewsItem {
     id: string;
@@ -25,9 +26,19 @@ export interface NewsItem {
     external_links: { title: string; url: string }[] | null;
     created_at: string;
     updated_at: string;
+    created_by_user_id: string | null;
 }
 
 export const NewsManagement = () => {
+    const currentUser = getCurrentUser();
+
+    /** ตรวจสิทธิ์: admin หรือเจ้าของข่าวเท่านั้นที่แก้ไข/ลบได้ */
+    const canManageNews = (item: NewsItem): boolean => {
+        if (!currentUser) return false;
+        if (currentUser.role === 'admin') return true;
+        return item.created_by_user_id === currentUser.id;
+    };
+
     const [news, setNews] = useState<NewsItem[]>([]);
     const [filteredNews, setFilteredNews] = useState<NewsItem[]>([]);
     const [isLoading, setIsLoading] = useState(true);
@@ -75,7 +86,7 @@ export const NewsManagement = () => {
                 .order('name');
 
             if (error) throw error;
-            setCategories(data?.map((c) => c.name) || []);
+            setCategories((data as any[])?.map((c) => c.name as string) || []);
         } catch (error) {
             console.error('Error fetching categories:', error);
         }
@@ -263,6 +274,7 @@ export const NewsManagement = () => {
                             onDelete={handleDelete}
                             onTogglePublish={handleTogglePublish}
                             onReorder={handleReorder}
+                            canManageNews={canManageNews}
                         />
                     )}
                 </CardContent>
