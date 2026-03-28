@@ -44,6 +44,20 @@ const STATUS_MAP: Record<string, { label: string; variant: 'default' | 'secondar
     cancelled:    { label: 'ยกเลิก',             variant: 'destructive' },
 };
 
+const IMAGE_COLUMNS = ['image_before', 'image_during', 'image_after'] as const;
+
+const getMissingSchemaColumn = (errorMessage?: string | null) => {
+    if (!errorMessage) return null;
+    const match = errorMessage.match(/Could not find the '([^']+)' column/i);
+    return match?.[1] ?? null;
+};
+
+const removeUnsupportedColumn = <T extends Record<string, any>>(payload: T, column: string) => {
+    const nextPayload = { ...payload };
+    delete nextPayload[column];
+    return nextPayload;
+};
+
 // ─── helper: แสดงรูปขนาดย่อพร้อม link ─────────────────────────────────────
 const ThumbLink = ({ url, label }: { url: string | null; label: string }) => {
     if (!url) return <span className="text-xs text-muted-foreground">ยังไม่มี</span>;
@@ -173,14 +187,32 @@ export const MaintenanceManagement = () => {
 
         setSaving(true);
         try {
+            let requestPayload = payload;
             let result;
-            if (editRecord) {
-                result = await (supabase.from('maintenance_requests' as any) as any)
-                    .update(payload)
-                    .eq('id', editRecord.id);
-            } else {
-                result = await (supabase.from('maintenance_requests' as any) as any)
-                    .insert([payload]);
+
+            const runSave = async () => {
+                if (editRecord) {
+                    return await (supabase.from('maintenance_requests' as any) as any)
+                        .update(requestPayload)
+                        .eq('id', editRecord.id);
+                }
+
+                return await (supabase.from('maintenance_requests' as any) as any)
+                    .insert([requestPayload]);
+            };
+
+            result = await runSave();
+
+            while (result?.error) {
+                const missingColumn = getMissingSchemaColumn(result.error.message);
+
+                if (!missingColumn || !IMAGE_COLUMNS.includes(missingColumn as typeof IMAGE_COLUMNS[number])) {
+                    break;
+                }
+
+                console.warn(`[maintenance] schema is missing "${missingColumn}", retrying without it`);
+                requestPayload = removeUnsupportedColumn(requestPayload, missingColumn);
+                result = await runSave();
             }
 
             if (result?.error) {
@@ -193,7 +225,14 @@ export const MaintenanceManagement = () => {
                 return;
             }
 
-            toast({ title: editRecord ? 'อัปเดตสำเร็จ ✅' : 'แจ้งซ่อมสำเร็จ ✅' });
+            const omittedImageColumns = IMAGE_COLUMNS.filter(column => !(column in requestPayload));
+
+            toast({
+                title: editRecord ? 'อัปเดตสำเร็จ ✅' : 'แจ้งซ่อมสำเร็จ ✅',
+                description: omittedImageColumns.length
+                    ? `บันทึกข้อมูลได้แล้ว แต่ฐานข้อมูลยังไม่รองรับคอลัมน์รูปภาพ: ${omittedImageColumns.join(', ')}`
+                    : undefined,
+            });
             setShowDialog(false);
             fetchRecords();
         } catch (e: any) {
