@@ -83,9 +83,10 @@ const SHIFT_MAP: Record<string, string> = {
 };
 
 const STATUS_MAP: Record<string, string> = {
-    recorded: 'บันทึกแล้ว',
-    verified: 'ตรวจสอบแล้ว',
+    pending: 'รอดำเนินการ',
+    verified: 'ส่งอนุมัติแล้ว',
     approved: 'อนุมัติแล้ว',
+    recorded: 'บันทึกแล้ว',
 };
 
 const ASSIGNMENT_STATUS_MAP: Record<string, string> = {
@@ -269,12 +270,8 @@ export const DutyManagement = () => {
         return staffList.filter(person => person.id !== currentUserId);
     }, [staffList, currentUserId]);
 
-    const canManageAssignment = (assignment: DutyAssignment) => {
-        if (isScheduleManager) return true;
-        if (isPastDutyDate(assignment.duty_date)) return false;
-        return assignment.assigned_user_id
-            ? assignment.assigned_user_id === currentUserId
-            : assignment.assigned_name === currentUserName;
+    const canManageAssignment = (_assignment: DutyAssignment) => {
+        return isScheduleManager;
     };
 
     const handleOpenAssignmentDialog = () => {
@@ -410,6 +407,12 @@ export const DutyManagement = () => {
         duty_images: existingRecord.duty_images || [],
     });
 
+    const canOpenRecordDialog = (assignment: DutyAssignment, record?: DutyRecord) => {
+        if (isPastDutyDate(assignment.duty_date)) return false;
+        if (!record) return false;
+        return record.status === 'approved';
+    };
+
     const openRecordDialog = (assignment: DutyAssignment) => {
         if (isPastDutyDate(assignment.duty_date)) {
             toast({ title: 'วันที่เข้าเวรพ้นกำหนดแล้ว', description: 'ไม่สามารถเริ่มบันทึกหรือขอเปลี่ยนเวรย้อนหลังได้', variant: 'destructive' });
@@ -417,12 +420,17 @@ export const DutyManagement = () => {
         }
 
         const existingRecord = recordByAssignmentId.get(assignment.id);
+        if (!canOpenRecordDialog(assignment, existingRecord)) {
+            toast({
+                title: 'ยังไม่สามารถบันทึกเวรได้',
+                description: 'ต้องตกลงหรือแลกเวรให้เสร็จ ส่งอนุมัติ และรออนุมัติก่อน',
+                variant: 'destructive',
+            });
+            return;
+        }
+
         setSelectedAssignment(assignment);
-        setRecordForm(
-            existingRecord
-                ? buildRecordFormFromExisting(assignment, existingRecord)
-                : buildRecordFormFromAssignment(assignment, currentUser)
-        );
+        setRecordForm(buildRecordFormFromExisting(assignment, existingRecord as DutyRecord));
         setShowRecordDialog(true);
     };
 
@@ -430,7 +438,11 @@ export const DutyManagement = () => {
         const existingRecord = recordByAssignmentId.get(assignment.id);
         if (existingRecord) return existingRecord;
 
-        const draftPayload = buildRecordFormFromAssignment(assignment, currentUser);
+        const draftPayload = {
+            ...buildRecordFormFromAssignment(assignment, currentUser),
+            status: 'pending',
+            approval_ready: false,
+        };
         const { data, error } = await (supabase.from('duty_records' as any) as any)
             .insert([draftPayload])
             .select('*')
@@ -523,12 +535,13 @@ export const DutyManagement = () => {
             duty_shift_label: selectedAssignment.duty_shift_label,
             recorder_name: recordForm.recorder_name || currentUserName || selectedAssignment.assigned_name,
             recorder_position: recordForm.recorder_position || currentUserPosition || selectedAssignment.assigned_position || '',
-            approval_ready: recordForm.swap_requested ? recordForm.swap_response_status === 'accepted' : true,
-            final_duty_name: recordForm.swap_requested ? recordForm.final_duty_name : (recordForm.recorder_name || currentUserName || selectedAssignment.assigned_name),
-            final_duty_position: recordForm.swap_requested ? recordForm.final_duty_position : (recordForm.recorder_position || currentUserPosition || selectedAssignment.assigned_position || ''),
-            final_duty_user_id: recordForm.swap_requested ? recordForm.final_duty_user_id : (currentUserId || selectedAssignment.assigned_user_id || null),
+            approval_ready: true,
+            final_duty_name: recordForm.final_duty_name || recordForm.recorder_name || currentUserName || selectedAssignment.assigned_name,
+            final_duty_position: recordForm.final_duty_position || recordForm.recorder_position || currentUserPosition || selectedAssignment.assigned_position || '',
+            final_duty_user_id: recordForm.final_duty_user_id || currentUserId || selectedAssignment.assigned_user_id || null,
             swap_response_status: recordForm.swap_requested ? recordForm.swap_response_status : 'not_required',
             duty_images: recordForm.duty_images || [],
+            status: 'recorded',
         };
 
         let error = null;
@@ -578,7 +591,7 @@ export const DutyManagement = () => {
 
     const canSubmitForApproval = (record: DutyRecord, assignment?: DutyAssignment) => {
         if (!assignment || isPastDutyDate(assignment.duty_date)) return false;
-        if (record.status !== 'recorded') return false;
+        if (record.status !== 'pending') return false;
         if (record.swap_requested && record.swap_response_status !== 'accepted') return false;
         return !!record.approval_ready;
     };
@@ -707,7 +720,7 @@ export const DutyManagement = () => {
         }
 
         const { error } = await (supabase.from('duty_records' as any) as any)
-            .update({ status: 'verified' })
+            .update({ status: 'approved' })
             .eq('id', record.id);
 
         if (error) {
@@ -768,16 +781,18 @@ export const DutyManagement = () => {
                                 </>
                             )}
 
-                            <Button
-                                variant={record ? 'outline' : 'default'}
-                                size="sm"
-                                className="gap-2"
-                                onClick={() => openRecordDialog(assignment)}
-                                disabled={dutyExpired}
-                            >
-                                <Edit2 className="w-4 h-4" />
-                                แก้ไขบันทึกเวร
-                            </Button>
+                            {!record && (
+                                <Button
+                                    variant="default"
+                                    size="sm"
+                                    className="gap-2"
+                                    onClick={() => openSwapDialog(assignment)}
+                                    disabled={dutyExpired}
+                                >
+                                    <CheckCheck className="w-4 h-4" />
+                                    ตกลง
+                                </Button>
+                            )}
 
                             {(!record || canRequestSwap(assignment, record)) && (
                                 <Button
@@ -794,6 +809,19 @@ export const DutyManagement = () => {
 
                             {record && (
                                 <>
+                                    {canOpenRecordDialog(assignment, record) && (
+                                        <Button
+                                            variant="default"
+                                            size="sm"
+                                            className="gap-2"
+                                            onClick={() => openRecordDialog(assignment)}
+                                            disabled={dutyExpired}
+                                        >
+                                            <ClipboardPen className="w-4 h-4" />
+                                            บันทึกเวร
+                                        </Button>
+                                    )}
+
                                     {canRespondSwap(record, assignment) && (
                                         <Button variant="secondary" size="sm" className="gap-2" onClick={() => openRespondDialog(record)}>
                                             <CheckCheck className="w-4 h-4" />
@@ -840,7 +868,7 @@ export const DutyManagement = () => {
 
                     {forMine && !record && !dutyExpired && (
                         <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900">
-                            เวรนี้เป็นของคุณ สามารถกด “แก้ไขบันทึกเวร” หรือ “แลกเวร” ได้ทันทีภายในวันที่กำหนด
+                            เวรนี้เป็นของคุณ เริ่มจากกด “ตกลง” หรือ “แลกเวร” ก่อน เมื่ออนุมัติแล้วจึงจะมีปุ่ม “บันทึกเวร”
                         </div>
                     )}
 
@@ -936,7 +964,7 @@ export const DutyManagement = () => {
                         <CardContent className="p-4 space-y-2">
                             <p className="font-medium">บันทึกเวรตามวันที่ได้รับมอบหมาย</p>
                             <p className="text-sm text-muted-foreground">
-                                เมื่อมีการกำหนดเวรแล้ว สามารถกด “แก้ไขบันทึกเวร” หรือ “แลกเวร” ได้ทันที โดยหลังจากตกลงแลกเวรและอนุมัติแล้ว จึงค่อยบันทึกเวรตามปกติ
+                                หลังจากกำหนดเข้าเวร ให้เลือก “ตกลง” หรือ “แลกเวร” ก่อน เมื่อส่งอนุมัติและอนุมัติแล้ว ปุ่ม “บันทึกเวร” จึงจะแสดง และในขั้นตอนนี้จึงจะอัปโหลดรูปภาพเหตุการณ์ได้
                             </p>
                         </CardContent>
                     </Card>
@@ -1069,7 +1097,18 @@ export const DutyManagement = () => {
                         <DialogTitle>บันทึกเวรตามวันที่กำหนด</DialogTitle>
                     </DialogHeader>
                     {recordForm && selectedAssignment && (
-                        <div className="space-y-4 overflow-y-auto max-h-[calc(90vh-140px)] pr-2">
+                            <div className="space-y-4 overflow-y-auto max-h-[calc(90vh-140px)] pr-2">
+                                {(() => {
+                                    const currentRecord = recordByAssignmentId.get(selectedAssignment.id);
+                                    if (!canOpenRecordDialog(selectedAssignment, currentRecord)) {
+                                        return (
+                                            <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+                                                ต้องผ่านขั้นตอนตกลง/แลกเวร ส่งอนุมัติ และอนุมัติก่อน จึงจะบันทึกเวรและอัปโหลดรูปภาพได้
+                                            </div>
+                                        );
+                                    }
+                                    return null;
+                                })()}
                             <div className="rounded-lg border bg-muted/20 p-3">
                                 <p className="text-sm font-medium">
                                     วันที่ {new Date(selectedAssignment.duty_date).toLocaleDateString('th-TH')} • {selectedAssignment.duty_shift_label}
