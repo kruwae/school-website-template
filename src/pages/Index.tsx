@@ -48,7 +48,7 @@ const Index = () => {
                 onClick={() => navigate('/admin/dashboard')}>
                 <LogIn className="w-5 h-5" /> เข้าสู่ระบบจัดการ
               </Button>
-              <Button size="lg" variant="outline" className="border-white/40 text-white hover:bg-white/10 h-12 px-8"
+              <Button size="lg" variant="outline" className="bg-yellow-400 text-blue-900 hover:bg-yellow-300 font-bold gap-2 h-12 px-8"
                 onClick={() => navigate('/admin/dashboard?tab=documents')}>
                 <FileText className="w-5 h-5 " /> คลังเอกสาร
               </Button>
