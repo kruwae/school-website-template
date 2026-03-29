@@ -1,10 +1,10 @@
-import { useEffect, useMemo, useState } from 'react';
+import { ChangeEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Plus, CalendarCheck, Trash2, Edit2, RefreshCcw, CheckCheck, Send, UserPlus, ClipboardPen } from 'lucide-react';
+import { Plus, CalendarCheck, Trash2, Edit2, RefreshCcw, CheckCheck, Send, UserPlus, ClipboardPen, Upload, Image as ImageIcon, X, Loader2 } from 'lucide-react';
 import {
     Select, SelectContent, SelectItem, SelectTrigger, SelectValue
 } from '@/components/ui/select';
@@ -32,6 +32,13 @@ interface DutyAssignment {
     status: 'scheduled' | 'completed' | 'cancelled' | string;
     created_at?: string;
     updated_at?: string;
+}
+
+interface DutyImageItem {
+    url: string;
+    name: string;
+    type?: string | null;
+    size?: number | null;
 }
 
 interface DutyRecord {
@@ -65,6 +72,7 @@ interface DutyRecord {
     final_duty_name?: string | null;
     final_duty_position?: string | null;
     approval_ready?: boolean;
+    duty_images?: DutyImageItem[] | null;
 }
 
 const SHIFT_MAP: Record<string, string> = {
@@ -136,7 +144,18 @@ const buildRecordFormFromAssignment = (assignment: DutyAssignment, currentUser: 
     final_duty_name: currentUser?.full_name || assignment.assigned_name || '',
     final_duty_position: currentUser?.position || assignment.assigned_position || '',
     approval_ready: true,
+    duty_images: [] as DutyImageItem[],
 });
+
+const sanitizeStorageSegment = (value: string) => {
+    return String(value || '')
+        .normalize('NFKD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^a-zA-Z0-9._-]/g, '-')
+        .replace(/-+/g, '-')
+        .replace(/^[.-]+|[.-]+$/g, '')
+        .trim();
+};
 
 const buildAssignmentForm = () => ({
     duty_date: new Date().toISOString().split('T')[0],
@@ -180,6 +199,8 @@ export const DutyManagement = () => {
     const [selectedAssignment, setSelectedAssignment] = useState<DutyAssignment | null>(null);
     const [recordForm, setRecordForm] = useState<any>(null);
     const [swapDialogRecord, setSwapDialogRecord] = useState<DutyRecord | null>(null);
+    const [uploadingImages, setUploadingImages] = useState(false);
+    const imageInputRef = useRef<HTMLInputElement>(null);
     const [swapTargetUserId, setSwapTargetUserId] = useState('');
     const [swapRequestNote, setSwapRequestNote] = useState('');
     const [respondDialogRecord, setRespondDialogRecord] = useState<DutyRecord | null>(null);
@@ -357,6 +378,38 @@ export const DutyManagement = () => {
         fetchAll();
     };
 
+    const buildRecordFormFromExisting = (assignment: DutyAssignment, existingRecord: DutyRecord) => ({
+        assignment_id: assignment.id,
+        duty_date: existingRecord.duty_date,
+        duty_shift: existingRecord.duty_shift,
+        duty_shift_label: existingRecord.duty_shift_label,
+        recorder_name: existingRecord.recorder_name,
+        recorder_position: existingRecord.recorder_position || '',
+        students_present: existingRecord.students_present || 0,
+        students_absent: existingRecord.students_absent || 0,
+        incidents: existingRecord.incidents || '',
+        actions_taken: existingRecord.actions_taken || '',
+        remarks: existingRecord.remarks || '',
+        status: existingRecord.status,
+        swap_requested: !!existingRecord.swap_requested,
+        swap_requested_at: existingRecord.swap_requested_at || null,
+        swap_requested_by_user_id: existingRecord.swap_requested_by_user_id || null,
+        swap_requested_by_name: existingRecord.swap_requested_by_name || null,
+        swap_requested_by_position: existingRecord.swap_requested_by_position || null,
+        swap_target_user_id: existingRecord.swap_target_user_id || null,
+        swap_target_name: existingRecord.swap_target_name || null,
+        swap_target_position: existingRecord.swap_target_position || null,
+        swap_response_status: existingRecord.swap_response_status || 'not_required',
+        swap_responded_at: existingRecord.swap_responded_at || null,
+        swap_responded_by_user_id: existingRecord.swap_responded_by_user_id || null,
+        swap_response_note: existingRecord.swap_response_note || '',
+        final_duty_user_id: existingRecord.final_duty_user_id || null,
+        final_duty_name: existingRecord.final_duty_name || existingRecord.recorder_name,
+        final_duty_position: existingRecord.final_duty_position || existingRecord.recorder_position || '',
+        approval_ready: existingRecord.approval_ready ?? (!existingRecord.swap_requested || existingRecord.swap_response_status === 'accepted'),
+        duty_images: existingRecord.duty_images || [],
+    });
+
     const openRecordDialog = (assignment: DutyAssignment) => {
         if (isPastDutyDate(assignment.duty_date)) {
             toast({ title: 'วันที่เข้าเวรพ้นกำหนดแล้ว', description: 'ไม่สามารถเริ่มบันทึกหรือขอเปลี่ยนเวรย้อนหลังได้', variant: 'destructive' });
@@ -365,43 +418,91 @@ export const DutyManagement = () => {
 
         const existingRecord = recordByAssignmentId.get(assignment.id);
         setSelectedAssignment(assignment);
-
-        if (existingRecord) {
-            setRecordForm({
-                assignment_id: assignment.id,
-                duty_date: existingRecord.duty_date,
-                duty_shift: existingRecord.duty_shift,
-                duty_shift_label: existingRecord.duty_shift_label,
-                recorder_name: existingRecord.recorder_name,
-                recorder_position: existingRecord.recorder_position || '',
-                students_present: existingRecord.students_present || 0,
-                students_absent: existingRecord.students_absent || 0,
-                incidents: existingRecord.incidents || '',
-                actions_taken: existingRecord.actions_taken || '',
-                remarks: existingRecord.remarks || '',
-                status: existingRecord.status,
-                swap_requested: !!existingRecord.swap_requested,
-                swap_requested_at: existingRecord.swap_requested_at || null,
-                swap_requested_by_user_id: existingRecord.swap_requested_by_user_id || null,
-                swap_requested_by_name: existingRecord.swap_requested_by_name || null,
-                swap_requested_by_position: existingRecord.swap_requested_by_position || null,
-                swap_target_user_id: existingRecord.swap_target_user_id || null,
-                swap_target_name: existingRecord.swap_target_name || null,
-                swap_target_position: existingRecord.swap_target_position || null,
-                swap_response_status: existingRecord.swap_response_status || 'not_required',
-                swap_responded_at: existingRecord.swap_responded_at || null,
-                swap_responded_by_user_id: existingRecord.swap_responded_by_user_id || null,
-                swap_response_note: existingRecord.swap_response_note || '',
-                final_duty_user_id: existingRecord.final_duty_user_id || null,
-                final_duty_name: existingRecord.final_duty_name || existingRecord.recorder_name,
-                final_duty_position: existingRecord.final_duty_position || existingRecord.recorder_position || '',
-                approval_ready: existingRecord.approval_ready ?? (!existingRecord.swap_requested || existingRecord.swap_response_status === 'accepted'),
-            });
-        } else {
-            setRecordForm(buildRecordFormFromAssignment(assignment, currentUser));
-        }
-
+        setRecordForm(
+            existingRecord
+                ? buildRecordFormFromExisting(assignment, existingRecord)
+                : buildRecordFormFromAssignment(assignment, currentUser)
+        );
         setShowRecordDialog(true);
+    };
+
+    const getOrCreateDraftRecord = async (assignment: DutyAssignment) => {
+        const existingRecord = recordByAssignmentId.get(assignment.id);
+        if (existingRecord) return existingRecord;
+
+        const draftPayload = buildRecordFormFromAssignment(assignment, currentUser);
+        const { data, error } = await (supabase.from('duty_records' as any) as any)
+            .insert([draftPayload])
+            .select('*')
+            .single();
+
+        if (error) throw error;
+
+        await (supabase.from('duty_assignments' as any) as any)
+            .update({ status: 'completed', updated_at: new Date().toISOString() })
+            .eq('id', assignment.id);
+
+        return data as DutyRecord;
+    };
+
+    const handleImageUpload = async (event: ChangeEvent<HTMLInputElement>) => {
+        const files = Array.from(event.target.files || []);
+        if (!files.length) return;
+
+        setUploadingImages(true);
+        try {
+            const uploadedItems: DutyImageItem[] = [];
+
+            for (const file of files) {
+                if (!file.type.startsWith('image/')) {
+                    toast({ title: 'อนุญาตเฉพาะไฟล์รูปภาพ', description: `${file.name} ไม่ใช่ไฟล์รูปภาพ`, variant: 'destructive' });
+                    continue;
+                }
+
+                const ext = sanitizeStorageSegment(file.name.split('.').pop() || 'jpg').replace(/\./g, '') || 'jpg';
+                const baseName = sanitizeStorageSegment(file.name.replace(/\.[^.]+$/, '') || 'duty-image').replace(/\./g, '') || 'duty-image';
+                const filePath = `duty-records/${Date.now()}-${Math.random().toString(36).slice(2, 10)}-${baseName}.${ext}`;
+
+                const { data, error } = await supabase.storage
+                    .from('school-images')
+                    .upload(filePath, file, {
+                        cacheControl: '3600',
+                        upsert: false,
+                        contentType: file.type || 'image/jpeg',
+                    });
+
+                if (error) throw error;
+
+                const { data: { publicUrl } } = supabase.storage.from('school-images').getPublicUrl(data.path);
+
+                uploadedItems.push({
+                    url: publicUrl,
+                    name: file.name,
+                    type: file.type,
+                    size: file.size,
+                });
+            }
+
+            if (uploadedItems.length) {
+                setRecordForm((prev: any) => ({
+                    ...prev,
+                    duty_images: [...(prev?.duty_images || []), ...uploadedItems],
+                }));
+                toast({ title: 'อัปโหลดรูปภาพสำเร็จ', description: `เพิ่มรูปภาพ ${uploadedItems.length} รูป` });
+            }
+        } catch (error: any) {
+            toast({ title: 'อัปโหลดรูปภาพไม่สำเร็จ', description: error?.message || 'เกิดข้อผิดพลาด', variant: 'destructive' });
+        } finally {
+            setUploadingImages(false);
+            event.target.value = '';
+        }
+    };
+
+    const removeDutyImage = (imageUrl: string) => {
+        setRecordForm((prev: any) => ({
+            ...prev,
+            duty_images: (prev?.duty_images || []).filter((item: DutyImageItem) => item.url !== imageUrl),
+        }));
     };
 
     const handleSaveRecord = async () => {
@@ -427,6 +528,7 @@ export const DutyManagement = () => {
             final_duty_position: recordForm.swap_requested ? recordForm.final_duty_position : (recordForm.recorder_position || currentUserPosition || selectedAssignment.assigned_position || ''),
             final_duty_user_id: recordForm.swap_requested ? recordForm.final_duty_user_id : (currentUserId || selectedAssignment.assigned_user_id || null),
             swap_response_status: recordForm.swap_requested ? recordForm.swap_response_status : 'not_required',
+            duty_images: recordForm.duty_images || [],
         };
 
         let error = null;
@@ -481,15 +583,21 @@ export const DutyManagement = () => {
         return !!record.approval_ready;
     };
 
-    const openSwapDialog = (record: DutyRecord) => {
-        const assignment = assignments.find(item => item.id === record.assignment_id);
-        if (!assignment || isPastDutyDate(assignment.duty_date)) {
+    const openSwapDialog = async (assignment: DutyAssignment) => {
+        if (isPastDutyDate(assignment.duty_date)) {
             toast({ title: 'วันที่เข้าเวรพ้นกำหนดแล้ว', description: 'ไม่สามารถเปลี่ยนเวรย้อนหลังได้', variant: 'destructive' });
             return;
         }
-        setSwapDialogRecord(record);
-        setSwapTargetUserId(record.swap_target_user_id || '');
-        setSwapRequestNote(record.swap_response_status === 'rejected' ? '' : record.swap_response_note || '');
+
+        try {
+            const record = await getOrCreateDraftRecord(assignment);
+            setSwapDialogRecord(record);
+            setSwapTargetUserId(record.swap_target_user_id || '');
+            setSwapRequestNote(record.swap_response_status === 'rejected' ? '' : record.swap_response_note || '');
+            fetchAll();
+        } catch (error: any) {
+            toast({ title: 'เปิดหน้าขอแลกเวรไม่สำเร็จ', description: error?.message || 'เกิดข้อผิดพลาด', variant: 'destructive' });
+        }
     };
 
     const handleSwapRequest = async () => {
@@ -660,38 +768,32 @@ export const DutyManagement = () => {
                                 </>
                             )}
 
-                            {!record && (
+                            <Button
+                                variant={record ? 'outline' : 'default'}
+                                size="sm"
+                                className="gap-2"
+                                onClick={() => openRecordDialog(assignment)}
+                                disabled={dutyExpired}
+                            >
+                                <Edit2 className="w-4 h-4" />
+                                แก้ไขบันทึกเวร
+                            </Button>
+
+                            {(!record || canRequestSwap(assignment, record)) && (
                                 <Button
+                                    variant="outline"
                                     size="sm"
                                     className="gap-2"
-                                    onClick={() => openRecordDialog(assignment)}
+                                    onClick={() => openSwapDialog(assignment)}
                                     disabled={dutyExpired}
                                 >
-                                    <ClipboardPen className="w-4 h-4" />
-                                    บันทึกเวร
+                                    <RefreshCcw className="w-4 h-4" />
+                                    แลกเวร
                                 </Button>
                             )}
 
                             {record && (
                                 <>
-                                    <Button
-                                        variant="outline"
-                                        size="sm"
-                                        className="gap-2"
-                                        onClick={() => openRecordDialog(assignment)}
-                                        disabled={dutyExpired}
-                                    >
-                                        <Edit2 className="w-4 h-4" />
-                                        แก้ไขบันทึกเวร
-                                    </Button>
-
-                                    {canRequestSwap(assignment, record) && (
-                                        <Button variant="outline" size="sm" className="gap-2" onClick={() => openSwapDialog(record)}>
-                                            <RefreshCcw className="w-4 h-4" />
-                                            เปลี่ยนเวร
-                                        </Button>
-                                    )}
-
                                     {canRespondSwap(record, assignment) && (
                                         <Button variant="secondary" size="sm" className="gap-2" onClick={() => openRespondDialog(record)}>
                                             <CheckCheck className="w-4 h-4" />
@@ -721,6 +823,9 @@ export const DutyManagement = () => {
                                     </Badge>
                                 </div>
                                 <p className="text-sm text-muted-foreground">เหตุการณ์: <span className="text-foreground">{record.incidents || '-'}</span></p>
+                                {!!record.duty_images?.length && (
+                                    <p className="text-sm text-muted-foreground mt-2">แนบรูปภาพแล้ว {record.duty_images.length} รูป</p>
+                                )}
                             </div>
                             <div className="rounded-lg border bg-emerald-50 p-3">
                                 <p className="text-xs font-semibold text-emerald-700 uppercase tracking-wide mb-2">ผู้ปฏิบัติเวรสุดท้าย</p>
@@ -735,7 +840,7 @@ export const DutyManagement = () => {
 
                     {forMine && !record && !dutyExpired && (
                         <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900">
-                            เวรนี้เป็นของคุณ สามารถเข้าไปบันทึกเหตุการณ์หรือขอเปลี่ยนเวรได้ภายในวันที่กำหนด
+                            เวรนี้เป็นของคุณ สามารถกด “แก้ไขบันทึกเวร” หรือ “แลกเวร” ได้ทันทีภายในวันที่กำหนด
                         </div>
                     )}
 
@@ -831,7 +936,7 @@ export const DutyManagement = () => {
                         <CardContent className="p-4 space-y-2">
                             <p className="font-medium">บันทึกเวรตามวันที่ได้รับมอบหมาย</p>
                             <p className="text-sm text-muted-foreground">
-                                จะบันทึกเหตุการณ์ได้เฉพาะเวรที่ถูกกำหนดไว้แล้วเท่านั้น และหากวันที่เวรพ้นกำหนด จะไม่สามารถเปลี่ยนเวรกับผู้อื่นได้
+                                เมื่อมีการกำหนดเวรแล้ว สามารถกด “แก้ไขบันทึกเวร” หรือ “แลกเวร” ได้ทันที โดยหลังจากตกลงแลกเวรและอนุมัติแล้ว จึงค่อยบันทึกเวรตามปกติ
                             </p>
                         </CardContent>
                     </Card>
@@ -998,6 +1103,68 @@ export const DutyManagement = () => {
                             <div>
                                 <Label>หมายเหตุ</Label>
                                 <Input value={recordForm.remarks} onChange={e => setRecordForm((p: any) => ({ ...p, remarks: e.target.value }))} />
+                            </div>
+
+                            <div className="space-y-3">
+                                <div className="flex items-center justify-between gap-3">
+                                    <Label>รูปภาพประกอบบันทึกเวร</Label>
+                                    <input
+                                        ref={imageInputRef}
+                                        type="file"
+                                        accept="image/*"
+                                        multiple
+                                        className="hidden"
+                                        onChange={handleImageUpload}
+                                    />
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        size="sm"
+                                        className="gap-2"
+                                        onClick={() => imageInputRef.current?.click()}
+                                        disabled={uploadingImages}
+                                    >
+                                        {uploadingImages ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+                                        อัปโหลดรูปภาพหลายรูป
+                                    </Button>
+                                </div>
+
+                                {!!recordForm.duty_images?.length && (
+                                    <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                                        {recordForm.duty_images.map((image: DutyImageItem) => (
+                                            <div key={image.url} className="relative rounded-lg overflow-hidden border bg-muted/20">
+                                                <img src={image.url} alt={image.name} className="w-full h-32 object-cover" />
+                                                <div className="p-2 space-y-1">
+                                                    <p className="text-xs truncate font-medium">{image.name}</p>
+                                                    <a
+                                                        href={image.url}
+                                                        target="_blank"
+                                                        rel="noopener noreferrer"
+                                                        className="text-xs text-primary underline"
+                                                    >
+                                                        เปิดดูรูป
+                                                    </a>
+                                                </div>
+                                                <Button
+                                                    type="button"
+                                                    variant="destructive"
+                                                    size="icon"
+                                                    className="absolute top-2 right-2 h-7 w-7"
+                                                    onClick={() => removeDutyImage(image.url)}
+                                                >
+                                                    <X className="w-3.5 h-3.5" />
+                                                </Button>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+
+                                {!recordForm.duty_images?.length && (
+                                    <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground flex items-center gap-2">
+                                        <ImageIcon className="w-4 h-4" />
+                                        ยังไม่มีรูปภาพประกอบบันทึกเวร สามารถอัปโหลดได้หลายรูป
+                                    </div>
+                                )}
                             </div>
                         </div>
                     )}
