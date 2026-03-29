@@ -157,7 +157,12 @@ export const DutyManagement = () => {
     const currentUserId = currentUser?.id || '';
     const currentUserName = currentUser?.full_name || '';
     const currentUserPosition = (currentUser as any)?.position || '';
-    const isScheduleManager = ['admin', 'director', 'deputy_director'].includes(role || '');
+    const currentUserPositionText = String(currentUserPosition || '').toLowerCase();
+    const canSelfSchedule = !!currentUserId;
+    const isScheduleManager =
+        ['admin', 'director', 'deputy_director'].includes(role || '') ||
+        currentUserPositionText.includes('หัวหน้ากิจการนักเรียน') ||
+        currentUserPositionText.includes('หัวหน้าฝ่ายบริหารงานทั่วไป');
 
     const [activeTab, setActiveTab] = useState('assignments');
     const [loading, setLoading] = useState(true);
@@ -244,8 +249,15 @@ export const DutyManagement = () => {
     };
 
     const handleSaveAssignment = async () => {
-        const selectedStaff = staffList.find(person => person.id === assignmentForm.assigned_user_id);
-        if (!selectedStaff) {
+        const selectedStaff = isScheduleManager
+            ? staffList.find(person => person.id === assignmentForm.assigned_user_id)
+            : {
+                id: currentUserId,
+                name: currentUserName,
+                position: currentUserPosition,
+            };
+
+        if (!selectedStaff?.id || !selectedStaff?.name) {
             toast({ title: 'กรุณาเลือกผู้เข้าเวร', variant: 'destructive' });
             return;
         }
@@ -656,7 +668,7 @@ export const DutyManagement = () => {
                 </div>
                 <div className="flex gap-3 items-center">
                     <Input type="month" value={filterMonth} onChange={e => setFilterMonth(e.target.value)} className="w-44" />
-                    {isScheduleManager && (
+                    {canSelfSchedule && (
                         <Button onClick={handleOpenAssignmentDialog} className="gap-2">
                             <UserPlus className="w-4 h-4" />
                             กำหนดเข้าเวร
@@ -676,7 +688,7 @@ export const DutyManagement = () => {
                         <CardContent className="p-4 space-y-2">
                             <p className="font-medium">ภาพรวมการกำหนดเข้าเวร</p>
                             <p className="text-sm text-muted-foreground">
-                                ต้องกำหนดวันและผู้เข้าเวรก่อน จึงจะสามารถไปบันทึกเหตุการณ์ในแท็บ “บันทึกเวร” ได้
+                                แต่ละคนสามารถกำหนดเวรของตนเองล่วงหน้าได้ และปุ่มกำหนดเข้าเวรในภาพรวมเป็นหน้าที่ของหัวหน้ากิจการนักเรียนหรือหัวหน้าฝ่ายบริหารงานทั่วไป
                             </p>
                         </CardContent>
                     </Card>
@@ -700,10 +712,16 @@ export const DutyManagement = () => {
                         <div className="space-y-4">
                             <div>
                                 <h2 className="text-lg font-semibold">รายการกำหนดเข้าเวรทั้งหมด</h2>
-                                <p className="text-sm text-muted-foreground">ใช้สำหรับตรวจสอบเวรที่ถูกมอบหมายในแต่ละวัน</p>
+                                <p className="text-sm text-muted-foreground">ใช้สำหรับตรวจสอบเวรที่ถูกมอบหมายในแต่ละวัน โดยส่วนภาพรวมนี้เน้นสำหรับผู้รับผิดชอบหลัก</p>
                             </div>
 
-                            {loading ? (
+                            {!isScheduleManager ? (
+                                <Card>
+                                    <CardContent className="p-8 text-center text-muted-foreground">
+                                        คุณยังสามารถกำหนดเวรของตนเองได้ตามปกติ ส่วนมุมมองกำหนดเวรภาพรวมสงวนไว้สำหรับหัวหน้ากิจการนักเรียนและหัวหน้าฝ่ายบริหารงานทั่วไป
+                                    </CardContent>
+                                </Card>
+                            ) : loading ? (
                                 <Card><CardContent className="p-8 text-center text-muted-foreground">กำลังโหลด...</CardContent></Card>
                             ) : filteredAssignments.length === 0 ? (
                                 <Card><CardContent className="p-8 text-center text-muted-foreground">ยังไม่มีรายการกำหนดเข้าเวร</CardContent></Card>
@@ -754,7 +772,7 @@ export const DutyManagement = () => {
             <Dialog open={showAssignmentDialog} onOpenChange={setShowAssignmentDialog}>
                 <DialogContent className="max-w-lg">
                     <DialogHeader>
-                        <DialogTitle>กำหนดเข้าเวร</DialogTitle>
+                        <DialogTitle>{isScheduleManager ? 'กำหนดเข้าเวร' : 'กำหนดเวรของตนเอง'}</DialogTitle>
                     </DialogHeader>
                     <div className="space-y-4">
                         <div className="grid grid-cols-2 gap-3">
@@ -784,29 +802,35 @@ export const DutyManagement = () => {
 
                         <div>
                             <Label>ผู้ที่ต้องเข้าเวร *</Label>
-                            <Select
-                                value={assignmentForm.assigned_user_id}
-                                onValueChange={v => {
-                                    const selected = staffList.find(item => item.id === v);
-                                    setAssignmentForm(p => ({
-                                        ...p,
-                                        assigned_user_id: v,
-                                        assigned_name: selected?.name || '',
-                                        assigned_position: selected?.position || '',
-                                    }));
-                                }}
-                            >
-                                <SelectTrigger>
-                                    <SelectValue placeholder={staffLoading ? 'กำลังโหลดรายชื่อ...' : 'เลือกบุคลากร'} />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    {staffList.map(person => (
-                                        <SelectItem key={person.id} value={person.id}>
-                                            {person.name}{person.position ? ` (${person.position})` : ''}
-                                        </SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
+                            {isScheduleManager ? (
+                                <Select
+                                    value={assignmentForm.assigned_user_id}
+                                    onValueChange={v => {
+                                        const selected = staffList.find(item => item.id === v);
+                                        setAssignmentForm(p => ({
+                                            ...p,
+                                            assigned_user_id: v,
+                                            assigned_name: selected?.name || '',
+                                            assigned_position: selected?.position || '',
+                                        }));
+                                    }}
+                                >
+                                    <SelectTrigger>
+                                        <SelectValue placeholder={staffLoading ? 'กำลังโหลดรายชื่อ...' : 'เลือกบุคลากร'} />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {staffList.map(person => (
+                                            <SelectItem key={person.id} value={person.id}>
+                                                {person.name}{person.position ? ` (${person.position})` : ''}
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            ) : (
+                                <div className="rounded-lg border bg-muted/20 px-3 py-2 text-sm">
+                                    {currentUserName || '-'}{currentUserPosition ? ` (${currentUserPosition})` : ''}
+                                </div>
+                            )}
                         </div>
 
                         <div>
