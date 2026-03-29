@@ -81,9 +81,20 @@ export const MaintenanceManagement = () => {
     const currentUser = getCurrentUser();
     const { canApprove, role } = usePermissions();
     const currentUserName = currentUser?.full_name || '';
+    const currentUserUsername = currentUser?.username || '';
     const currentUserPosition = currentUser?.position || '';
     const isAdmin = role === 'admin';
     const MANAGEMENT_POSITIONS = ['หัวหน้าฝ่ายบริหารทั่วไป', 'หัวหน้าอาคารสถานที่'];
+    const isTechnicianUser =
+        role === 'support_staff' ||
+        currentUserUsername.startsWith('technician') ||
+        currentUserPosition.includes('ช่าง');
+    const canManageMaintenanceWork =
+        isTechnicianUser ||
+        isAdmin ||
+        role === 'director' ||
+        role === 'deputy_director' ||
+        MANAGEMENT_POSITIONS.includes(currentUserPosition);
 
     /**
      * canModify rules:
@@ -92,9 +103,17 @@ export const MaintenanceManagement = () => {
      */
     const canModify = (r: MaintenanceRequest): boolean => {
         if (!currentUser) return false;
-        if (r.status === 'completed' || r.status === 'cancelled') return isAdmin;
-        if (role === 'admin' || role === 'director' || role === 'deputy_director') return true;
-        return r.reported_by === currentUserName;
+        if (r.status === 'cancelled') return isAdmin;
+
+        if (canManageMaintenanceWork) {
+            if (r.status === 'completed') {
+                return isAdmin || r.assigned_to === currentUserName;
+            }
+
+            return !r.assigned_to || r.assigned_to === currentUserName || MANAGEMENT_POSITIONS.includes(currentUserPosition);
+        }
+
+        return r.status === 'pending' && r.reported_by === currentUserName;
     };
 
     const [records, setRecords] = useState<MaintenanceRequest[]>([]);
@@ -142,10 +161,16 @@ export const MaintenanceManagement = () => {
         finally { setLoading(false); }
     };
 
-    const filtered = records.filter(r =>
-        (filterStatus === 'all' || r.status === filterStatus) &&
-        (filterPriority === 'all' || r.priority === filterPriority)
-    );
+    const filtered = records.filter(r => {
+        const matchesFilter =
+            (filterStatus === 'all' || r.status === filterStatus) &&
+            (filterPriority === 'all' || r.priority === filterPriority);
+
+        if (!matchesFilter) return false;
+        if (canManageMaintenanceWork) return true;
+
+        return r.reported_by === currentUserName;
+    });
 
     const openAdd = () => {
         setEditRecord(null);
@@ -178,6 +203,21 @@ export const MaintenanceManagement = () => {
             .eq('id', id);
         const label = STATUS_MAP[newStatus]?.label || newStatus;
         toast({ title: `อัปเดตสถานะ: ${label}` });
+        fetchRecords();
+    };
+
+    const acceptWork = async (record: MaintenanceRequest) => {
+        if (!currentUserName) return;
+
+        await (supabase.from('maintenance_requests' as any) as any)
+            .update({
+                assigned_to: currentUserName,
+                status: record.status === 'pending' ? 'acknowledged' : 'in_progress',
+                updated_at: new Date().toISOString(),
+            })
+            .eq('id', record.id);
+
+        toast({ title: 'รับงานซ่อมเรียบร้อยแล้ว' });
         fetchRecords();
     };
 
@@ -384,7 +424,7 @@ export const MaintenanceManagement = () => {
                                         <Eye className="w-3.5 h-3.5" />
                                     </Button>
 
-                                    {/* ปุ่มอนุมัติสำหรับหัวหน้า/ผอ. */}
+                                    {/* ปุ่มอนุมัติ/รับงาน */}
                                     {canApprove() && r.status === 'pending' && (
                                         <Button variant="ghost" size="icon" className="h-7 w-7 text-blue-600" title="รับเรื่อง"
                                             onClick={() => approveRecord(r.id, 'acknowledged')}>
@@ -403,6 +443,12 @@ export const MaintenanceManagement = () => {
                                             <CheckCircle2 className="w-3.5 h-3.5" />
                                         </Button>
                                     )}
+                                    {isTechnicianUser && !r.assigned_to && r.status !== 'completed' && r.status !== 'cancelled' && (
+                                        <Button variant="ghost" size="icon" className="h-7 w-7 text-orange-600" title="รับงานซ่อม"
+                                            onClick={() => acceptWork(r)}>
+                                            <Wrench className="w-3.5 h-3.5" />
+                                        </Button>
+                                    )}
 
                                     {/* ปุ่มแก้ไข/ลบ ตามกฎสิทธิ์ */}
                                     {(r.status === 'completed' || r.status === 'cancelled') && !isAdmin ? (
@@ -417,7 +463,7 @@ export const MaintenanceManagement = () => {
                                             </Button>
                                         </>
                                     ) : (
-                                        <span className="text-xs text-muted-foreground px-2" title="เฉพาะผู้แจ้งหรือผู้บริหารเท่านั้น">–</span>
+                                        <span className="text-xs text-muted-foreground px-2" title="ไม่มีสิทธิ์แก้ไขรายการนี้">–</span>
                                     )}
                                 </div>
                             </div>
