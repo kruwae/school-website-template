@@ -158,7 +158,7 @@ const UniversalLogin = () => {
               </form>
 
               <div className="mt-6 p-4 bg-amber-50 border border-amber-200 rounded-xl">
-                <p className="text-xs font-semibold text-amber-800 mb-2">🔐 บัญชีทดสอบ</p>
+              
                 <div className="space-y-1 text-xs text-amber-700 font-mono">
     
                 </div>
