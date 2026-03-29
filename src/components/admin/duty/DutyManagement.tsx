@@ -148,6 +148,11 @@ const buildAssignmentForm = () => ({
     notes: '',
 });
 
+const isHeadManagerPosition = (position: string) => {
+    const positionText = String(position || '').toLowerCase();
+    return positionText.includes('หัวหน้ากิจการนักเรียน') || positionText.includes('หัวหน้าฝ่ายบริหารงานทั่วไป');
+};
+
 export const DutyManagement = () => {
     const { toast } = useToast();
     const currentUser = getCurrentUser();
@@ -161,8 +166,7 @@ export const DutyManagement = () => {
     const canSelfSchedule = !!currentUserId;
     const isScheduleManager =
         ['admin', 'director', 'deputy_director'].includes(role || '') ||
-        currentUserPositionText.includes('หัวหน้ากิจการนักเรียน') ||
-        currentUserPositionText.includes('หัวหน้าฝ่ายบริหารงานทั่วไป');
+        isHeadManagerPosition(currentUserPositionText);
 
     const [activeTab, setActiveTab] = useState('assignments');
     const [loading, setLoading] = useState(true);
@@ -171,6 +175,7 @@ export const DutyManagement = () => {
     const [records, setRecords] = useState<DutyRecord[]>([]);
     const [showAssignmentDialog, setShowAssignmentDialog] = useState(false);
     const [assignmentForm, setAssignmentForm] = useState(buildAssignmentForm());
+    const [editingAssignment, setEditingAssignment] = useState<DutyAssignment | null>(null);
     const [showRecordDialog, setShowRecordDialog] = useState(false);
     const [selectedAssignment, setSelectedAssignment] = useState<DutyAssignment | null>(null);
     const [recordForm, setRecordForm] = useState<any>(null);
@@ -243,9 +248,68 @@ export const DutyManagement = () => {
         return staffList.filter(person => person.id !== currentUserId);
     }, [staffList, currentUserId]);
 
+    const canManageAssignment = (assignment: DutyAssignment) => {
+        if (isScheduleManager) return true;
+        if (isPastDutyDate(assignment.duty_date)) return false;
+        return assignment.assigned_user_id
+            ? assignment.assigned_user_id === currentUserId
+            : assignment.assigned_name === currentUserName;
+    };
+
     const handleOpenAssignmentDialog = () => {
+        setEditingAssignment(null);
         setAssignmentForm(buildAssignmentForm());
         setShowAssignmentDialog(true);
+    };
+
+    const handleEditAssignment = (assignment: DutyAssignment) => {
+        if (!canManageAssignment(assignment)) {
+            toast({ title: 'คุณไม่มีสิทธิ์แก้ไขการกำหนดเวรนี้', variant: 'destructive' });
+            return;
+        }
+
+        setEditingAssignment(assignment);
+        setAssignmentForm({
+            duty_date: assignment.duty_date,
+            duty_shift: assignment.duty_shift,
+            duty_shift_label: assignment.duty_shift_label,
+            assigned_user_id: assignment.assigned_user_id || '',
+            assigned_name: assignment.assigned_name || '',
+            assigned_position: assignment.assigned_position || '',
+            notes: assignment.notes || '',
+        });
+        setShowAssignmentDialog(true);
+    };
+
+    const handleDeleteAssignment = async (assignment: DutyAssignment) => {
+        if (!canManageAssignment(assignment)) {
+            toast({ title: 'คุณไม่มีสิทธิ์ลบการกำหนดเวรนี้', variant: 'destructive' });
+            return;
+        }
+
+        if (!confirm('ต้องการลบกำหนดเวรนี้ใช่หรือไม่?')) return;
+
+        const relatedRecord = recordByAssignmentId.get(assignment.id);
+        if (relatedRecord) {
+            toast({
+                title: 'ไม่สามารถลบได้',
+                description: 'เวรนี้มีการบันทึกเวรแล้ว กรุณาจัดการบันทึกเวรก่อน',
+                variant: 'destructive',
+            });
+            return;
+        }
+
+        const { error } = await (supabase.from('duty_assignments' as any) as any)
+            .delete()
+            .eq('id', assignment.id);
+
+        if (error) {
+            toast({ title: 'ลบกำหนดเวรไม่สำเร็จ', description: error.message, variant: 'destructive' });
+            return;
+        }
+
+        toast({ title: 'ลบกำหนดเวรสำเร็จ' });
+        fetchAll();
     };
 
     const handleSaveAssignment = async () => {
@@ -275,14 +339,21 @@ export const DutyManagement = () => {
             updated_at: new Date().toISOString(),
         };
 
-        const { error } = await (supabase.from('duty_assignments' as any) as any).insert([payload]);
+        const { error } = editingAssignment
+            ? await (supabase.from('duty_assignments' as any) as any)
+                .update(payload)
+                .eq('id', editingAssignment.id)
+            : await (supabase.from('duty_assignments' as any) as any)
+                .insert([payload]);
+
         if (error) {
             toast({ title: 'บันทึกกำหนดเข้าเวรไม่สำเร็จ', description: error.message, variant: 'destructive' });
             return;
         }
 
-        toast({ title: 'กำหนดเข้าเวรสำเร็จ' });
+        toast({ title: editingAssignment ? 'แก้ไขกำหนดเข้าเวรสำเร็จ' : 'กำหนดเข้าเวรสำเร็จ' });
         setShowAssignmentDialog(false);
+        setEditingAssignment(null);
         fetchAll();
     };
 
@@ -566,6 +637,29 @@ export const DutyManagement = () => {
                         </div>
 
                         <div className="flex flex-wrap gap-2 items-center">
+                            {canManageAssignment(assignment) && (
+                                <>
+                                    <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className="h-8 w-8"
+                                        onClick={() => handleEditAssignment(assignment)}
+                                        title="แก้ไขกำหนดเวร"
+                                    >
+                                        <Edit2 className="w-4 h-4" />
+                                    </Button>
+                                    <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className="h-8 w-8 text-destructive"
+                                        onClick={() => handleDeleteAssignment(assignment)}
+                                        title="ลบกำหนดเวร"
+                                    >
+                                        <Trash2 className="w-4 h-4" />
+                                    </Button>
+                                </>
+                            )}
+
                             {!record && (
                                 <Button
                                     size="sm"
@@ -772,7 +866,11 @@ export const DutyManagement = () => {
             <Dialog open={showAssignmentDialog} onOpenChange={setShowAssignmentDialog}>
                 <DialogContent className="max-w-lg">
                     <DialogHeader>
-                        <DialogTitle>{isScheduleManager ? 'กำหนดเข้าเวร' : 'กำหนดเวรของตนเอง'}</DialogTitle>
+                        <DialogTitle>
+                            {editingAssignment
+                                ? (isScheduleManager ? 'แก้ไขกำหนดเข้าเวร' : 'แก้ไขเวรของตนเอง')
+                                : (isScheduleManager ? 'กำหนดเข้าเวร' : 'กำหนดเวรของตนเอง')}
+                        </DialogTitle>
                     </DialogHeader>
                     <div className="space-y-4">
                         <div className="grid grid-cols-2 gap-3">
@@ -844,8 +942,18 @@ export const DutyManagement = () => {
                         </div>
                     </div>
                     <DialogFooter>
-                        <Button variant="outline" onClick={() => setShowAssignmentDialog(false)}>ยกเลิก</Button>
-                        <Button onClick={handleSaveAssignment}>บันทึกกำหนดเข้าเวร</Button>
+                        <Button
+                            variant="outline"
+                            onClick={() => {
+                                setShowAssignmentDialog(false);
+                                setEditingAssignment(null);
+                            }}
+                        >
+                            ยกเลิก
+                        </Button>
+                        <Button onClick={handleSaveAssignment}>
+                            {editingAssignment ? 'บันทึกการแก้ไข' : 'บันทึกกำหนดเข้าเวร'}
+                        </Button>
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
