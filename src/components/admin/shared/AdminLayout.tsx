@@ -214,13 +214,18 @@ export const AdminLayout = ({ children }: AdminLayoutProps) => {
                             </span>
                         </div>
                     </div>
-                    <div className="flex gap-2">
-                        <Button variant="outline" size="sm" className="flex-1 text-xs h-8" onClick={() => navigate('/')}>
+                    <div className="grid grid-cols-2 gap-2">
+                        <Button variant="outline" size="sm" className="text-xs h-8" onClick={() => navigate('/admin/dashboard?tab=settings')}>
+                            <Settings className="w-3 h-3 mr-1" />
+                            บัญชี
+                        </Button>
+                        <Button variant="outline" size="sm" className="text-xs h-8" onClick={() => navigate('/')}>
                             <Home className="w-3 h-3 mr-1" />
                             หน้าเว็บ
                         </Button>
-                        <Button variant="outline" size="sm" className="h-8 px-2" onClick={handleLogout}>
-                            <LogOut className="w-3 h-3" />
+                        <Button variant="outline" size="sm" className="col-span-2 h-8" onClick={handleLogout}>
+                            <LogOut className="w-3 h-3 mr-1" />
+                            ออกจากระบบ
                         </Button>
                     </div>
                 </div>

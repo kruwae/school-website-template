@@ -110,6 +110,34 @@ export const UserMenuControl = () => {
 
     const [resettingUserId, setResettingUserId] = useState<string | null>(null);
 
+    const notifyAdmins = async (payload: {
+        type: string;
+        title: string;
+        message: string;
+        actorUserId?: string | null;
+        targetUserId?: string | null;
+        metadata?: Record<string, any>;
+    }) => {
+        try {
+            const { error } = await (supabase.from('admin_notifications' as any) as any)
+                .insert([{
+                    type: payload.type,
+                    title: payload.title,
+                    message: payload.message,
+                    actor_user_id: payload.actorUserId || null,
+                    target_user_id: payload.targetUserId || null,
+                    metadata: payload.metadata || {},
+                    is_read: false,
+                }]);
+
+            if (error) {
+                console.warn('[user-menu-control] notify admin failed:', error.message);
+            }
+        } catch (error) {
+            console.warn('[user-menu-control] notify admin unexpected error:', error);
+        }
+    };
+
     const fetchUsers = async () => {
         setLoading(true);
         const { data } = await (supabase.from('app_users' as any) as any)
@@ -329,6 +357,22 @@ export const UserMenuControl = () => {
 
             if (error) throw error;
 
+            await notifyAdmins({
+                type: 'password_reset_by_admin',
+                title: 'admin รีเซ็ตรหัสผ่านผู้ใช้',
+                message: `${adminUser?.full_name || adminUser?.username || 'admin'} ได้รีเซ็ตรหัสผ่านให้ ${user.full_name} แล้ว`,
+                actorUserId: adminUser?.id || null,
+                targetUserId: user.id,
+                metadata: {
+                    admin_username: adminUser?.username || null,
+                    admin_full_name: adminUser?.full_name || null,
+                    target_username: user.username || null,
+                    target_full_name: user.full_name || null,
+                    reset_at: new Date().toISOString(),
+                    source: 'admin-reset',
+                },
+            });
+
             toast({ title: `รีเซ็ตรหัสผ่านของ ${user.full_name} สำเร็จ` });
         } catch (error: any) {
             toast({
@@ -366,7 +410,7 @@ export const UserMenuControl = () => {
                                     <Users className="w-5 h-5" /> รายชื่อผู้ใช้งานระบบ
                                 </CardTitle>
                                 <p className="text-sm text-muted-foreground mt-1">
-                                    สร้าง แก้ไข ลบ เปิด/ปิดการใช้งาน และรีเซ็ตรหัสผ่านผู้ใช้
+                                    สร้าง แก้ไข ลบ เปิด/ปิดการใช้งาน และเปลี่ยนรหัสผ่านให้ผู้ใช้กรณีลืมรหัส
                                 </p>
                             </div>
                             <Button onClick={openCreateUser} className="gap-2">
@@ -413,7 +457,7 @@ export const UserMenuControl = () => {
                                                     onClick={() => handleResetPassword(user)}
                                                 >
                                                     {resettingUserId === user.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <KeyRound className="w-3.5 h-3.5" />}
-                                                    รีเซ็ตรหัสผ่าน
+                                                    เปลี่ยนรหัสให้
                                                 </Button>
                                                 {user.role !== 'admin' && (
                                                     <Button

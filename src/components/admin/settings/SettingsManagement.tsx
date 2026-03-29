@@ -16,7 +16,11 @@ interface Setting {
     description: string | null;
 }
 
-export const SettingsManagement = () => {
+interface SettingsManagementProps {
+    adminOnly?: boolean;
+}
+
+export const SettingsManagement = ({ adminOnly = false }: SettingsManagementProps) => {
     const [settings, setSettings] = useState<Record<string, string>>({});
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
@@ -28,10 +32,44 @@ export const SettingsManagement = () => {
     const [passwordSaving, setPasswordSaving] = useState(false);
     const { toast } = useToast();
     const currentUser = getCurrentUser();
+    const showSystemSettings = !adminOnly || currentUser?.role === 'admin';
 
     useEffect(() => {
-        fetchSettings();
-    }, []);
+        if (showSystemSettings) {
+            fetchSettings();
+            return;
+        }
+
+        setLoading(false);
+    }, [showSystemSettings]);
+
+    const notifyAdmins = async (payload: {
+        type: string;
+        title: string;
+        message: string;
+        actorUserId?: string | null;
+        targetUserId?: string | null;
+        metadata?: Record<string, any>;
+    }) => {
+        try {
+            const { error } = await (supabase.from('admin_notifications' as any) as any)
+                .insert([{
+                    type: payload.type,
+                    title: payload.title,
+                    message: payload.message,
+                    actor_user_id: payload.actorUserId || null,
+                    target_user_id: payload.targetUserId || null,
+                    metadata: payload.metadata || {},
+                    is_read: false,
+                }]);
+
+            if (error) {
+                console.warn('[settings] notify admin failed:', error.message);
+            }
+        } catch (error) {
+            console.warn('[settings] notify admin unexpected error:', error);
+        }
+    };
 
     const fetchSettings = async () => {
         try {
@@ -173,6 +211,20 @@ export const SettingsManagement = () => {
                 confirmPassword: '',
             });
 
+            await notifyAdmins({
+                type: 'password_changed',
+                title: 'มีผู้ใช้เปลี่ยนรหัสผ่าน',
+                message: `${currentUser.full_name || currentUser.username || 'ผู้ใช้งาน'} ได้เปลี่ยนรหัสผ่านของตนเองสำเร็จ`,
+                actorUserId: currentUser.id,
+                targetUserId: currentUser.id,
+                metadata: {
+                    username: currentUser.username || null,
+                    full_name: currentUser.full_name || null,
+                    changed_at: new Date().toISOString(),
+                    source: 'self-service',
+                },
+            });
+
             toast({
                 title: 'เปลี่ยนรหัสผ่านสำเร็จ',
                 description: 'ใช้รหัสผ่านใหม่ในการเข้าสู่ระบบครั้งถัดไป',
@@ -268,6 +320,8 @@ export const SettingsManagement = () => {
                     </CardContent>
                 </Card>
 
+                {showSystemSettings && (
+                <>
                 {/* General Settings */}
                 <Card>
                     <CardHeader>
@@ -849,6 +903,8 @@ export const SettingsManagement = () => {
                         {saving ? 'กำลังบันทึก...' : 'บันทึกการตั้งค่า'}
                     </Button>
                 </div>
+                </>
+                )}
             </div>
         </div>
     );

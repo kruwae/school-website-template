@@ -97,7 +97,7 @@ const AdminDashboard = () => {
             case 'audit-committee':    return <AuditCommitteeManagement />;
             case 'staff':              return <StaffManagement />;
             case 'administrators':     return <AdministratorsManagement />;
-            case 'settings':           return <SettingsManagement />;
+            case 'settings':           return <SettingsManagement adminOnly={currentUser?.role !== 'admin'} />;
             case 'user-menu-control':  return <UserMenuControl />;
 
             case 'dashboard':
