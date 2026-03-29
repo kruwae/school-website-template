@@ -24,15 +24,25 @@ export const SettingsManagement = ({ adminOnly = false }: SettingsManagementProp
     const [settings, setSettings] = useState<Record<string, string>>({});
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
+    const { toast } = useToast();
+    const currentUser = getCurrentUser();
+    const showSystemSettings = !adminOnly || currentUser?.role === 'admin';
+    const [profileForm, setProfileForm] = useState({
+        fullName: '',
+    });
+    const [profileSaving, setProfileSaving] = useState(false);
     const [passwordForm, setPasswordForm] = useState({
         currentPassword: '',
         newPassword: '',
         confirmPassword: '',
     });
     const [passwordSaving, setPasswordSaving] = useState(false);
-    const { toast } = useToast();
-    const currentUser = getCurrentUser();
-    const showSystemSettings = !adminOnly || currentUser?.role === 'admin';
+
+    useEffect(() => {
+        setProfileForm({
+            fullName: currentUser?.full_name || '',
+        });
+    }, [currentUser?.full_name]);
 
     useEffect(() => {
         if (showSystemSettings) {
@@ -136,6 +146,59 @@ export const SettingsManagement = ({ adminOnly = false }: SettingsManagementProp
             });
         } finally {
             setSaving(false);
+        }
+    };
+
+    const handleProfileSave = async () => {
+        if (!currentUser?.id) {
+            toast({
+                variant: 'destructive',
+                title: 'ไม่พบข้อมูลผู้ใช้',
+                description: 'กรุณาเข้าสู่ระบบใหม่อีกครั้ง',
+            });
+            return;
+        }
+
+        if (!profileForm.fullName.trim()) {
+            toast({
+                variant: 'destructive',
+                title: 'กรอกข้อมูลไม่ครบ',
+                description: 'กรุณากรอกชื่อ-สกุล',
+            });
+            return;
+        }
+
+        setProfileSaving(true);
+        try {
+            const fullName = profileForm.fullName.trim();
+            const { error } = await (supabase.from('app_users' as any) as any)
+                .update({
+                    full_name: fullName,
+                    updated_at: new Date().toISOString(),
+                })
+                .eq('id', currentUser.id);
+
+            if (error) throw error;
+
+            const updatedUser = {
+                ...currentUser,
+                full_name: fullName,
+            };
+
+            localStorage.setItem('currentUser', JSON.stringify(updatedUser));
+
+            toast({
+                title: 'บันทึกข้อมูลบัญชีสำเร็จ',
+                description: 'อัปเดตชื่อ-สกุลเรียบร้อยแล้ว',
+            });
+        } catch (error: any) {
+            toast({
+                variant: 'destructive',
+                title: 'บันทึกข้อมูลไม่สำเร็จ',
+                description: error?.message || 'เกิดข้อผิดพลาดระหว่างบันทึกข้อมูลบัญชี',
+            });
+        } finally {
+            setProfileSaving(false);
         }
     };
 
@@ -264,6 +327,41 @@ export const SettingsManagement = ({ adminOnly = false }: SettingsManagementProp
             </div>
 
             <div className="space-y-6">
+                <Card>
+                    <CardHeader>
+                        <CardTitle className="flex items-center gap-2">
+                            <Settings className="w-5 h-5" />
+                            ข้อมูลบัญชี
+                        </CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div className="space-y-2 md:col-span-2">
+                                <Label htmlFor="account_full_name">ชื่อ-สกุล</Label>
+                                <Input
+                                    id="account_full_name"
+                                    value={profileForm.fullName}
+                                    onChange={(e) => setProfileForm((prev) => ({ ...prev, fullName: e.target.value }))}
+                                    placeholder="กรอกชื่อ-สกุลปัจจุบัน"
+                                />
+                            </div>
+                        </div>
+
+                        <div className="flex items-center justify-between gap-3 border rounded-lg px-4 py-3 bg-muted/20">
+                            <div>
+                                <p className="text-sm font-medium">บัญชีผู้ใช้งาน</p>
+                                <p className="text-xs text-muted-foreground">
+                                    {currentUser?.username ? `@${currentUser.username}` : '-'}
+                                </p>
+                            </div>
+                            <Button onClick={handleProfileSave} disabled={profileSaving} className="gap-2">
+                                <Save className="w-4 h-4" />
+                                {profileSaving ? 'กำลังบันทึก...' : 'บันทึกชื่อ-สกุล'}
+                            </Button>
+                        </div>
+                    </CardContent>
+                </Card>
+
                 <Card>
                     <CardHeader>
                         <CardTitle className="flex items-center gap-2">
