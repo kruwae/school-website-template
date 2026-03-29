@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Plus, CalendarCheck, Trash2, Edit2, RefreshCcw, CheckCheck, Send } from 'lucide-react';
+import { Plus, CalendarCheck, Trash2, Edit2, RefreshCcw, CheckCheck, Send, UserPlus, ClipboardPen } from 'lucide-react';
 import {
     Select, SelectContent, SelectItem, SelectTrigger, SelectValue
 } from '@/components/ui/select';
@@ -17,9 +17,26 @@ import { useToast } from '@/hooks/use-toast';
 import { getCurrentUser } from '@/lib/auth';
 import { usePermissions } from '@/hooks/usePermissions';
 import { useStaffList } from '@/hooks/useStaffList';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+
+interface DutyAssignment {
+    id: string;
+    duty_date: string;
+    duty_shift: string;
+    duty_shift_label: string;
+    assigned_user_id?: string | null;
+    assigned_name: string;
+    assigned_position?: string | null;
+    assigned_by_user_id?: string | null;
+    notes?: string | null;
+    status: 'scheduled' | 'completed' | 'cancelled' | string;
+    created_at?: string;
+    updated_at?: string;
+}
 
 interface DutyRecord {
     id: string;
+    assignment_id?: string | null;
     duty_date: string;
     duty_shift: string;
     duty_shift_label: string;
@@ -51,13 +68,22 @@ interface DutyRecord {
 }
 
 const SHIFT_MAP: Record<string, string> = {
-    morning: 'เช้า', afternoon: 'บ่าย', evening: 'เย็น', overnight: 'ค้างคืน',
+    morning: 'เช้า',
+    afternoon: 'บ่าย',
+    evening: 'เย็น',
+    overnight: 'ค้างคืน',
 };
 
 const STATUS_MAP: Record<string, string> = {
     recorded: 'บันทึกแล้ว',
     verified: 'ตรวจสอบแล้ว',
     approved: 'อนุมัติแล้ว',
+};
+
+const ASSIGNMENT_STATUS_MAP: Record<string, string> = {
+    scheduled: 'กำหนดแล้ว',
+    completed: 'บันทึกเวรแล้ว',
+    cancelled: 'ยกเลิก',
 };
 
 const SWAP_STATUS_MAP: Record<string, string> = {
@@ -67,12 +93,27 @@ const SWAP_STATUS_MAP: Record<string, string> = {
     rejected: 'ปฏิเสธการรับเวร',
 };
 
-const buildDefaultForm = (currentUser: any) => ({
-    duty_date: new Date().toISOString().split('T')[0],
-    duty_shift: 'morning',
-    duty_shift_label: 'เวรเช้า',
-    recorder_name: currentUser?.full_name || '',
-    recorder_position: currentUser?.position || '',
+const startOfToday = () => {
+    const d = new Date();
+    d.setHours(0, 0, 0, 0);
+    return d;
+};
+
+const toDateOnly = (value: string) => {
+    const d = new Date(value);
+    d.setHours(0, 0, 0, 0);
+    return d;
+};
+
+const isPastDutyDate = (dutyDate: string) => toDateOnly(dutyDate).getTime() < startOfToday().getTime();
+
+const buildRecordFormFromAssignment = (assignment: DutyAssignment, currentUser: any) => ({
+    assignment_id: assignment.id,
+    duty_date: assignment.duty_date,
+    duty_shift: assignment.duty_shift,
+    duty_shift_label: assignment.duty_shift_label,
+    recorder_name: currentUser?.full_name || assignment.assigned_name || '',
+    recorder_position: currentUser?.position || assignment.assigned_position || '',
     students_present: 0,
     students_absent: 0,
     incidents: '',
@@ -91,10 +132,20 @@ const buildDefaultForm = (currentUser: any) => ({
     swap_responded_at: null as string | null,
     swap_responded_by_user_id: null as string | null,
     swap_response_note: '',
-    final_duty_user_id: currentUser?.id || null,
-    final_duty_name: currentUser?.full_name || '',
-    final_duty_position: currentUser?.position || '',
+    final_duty_user_id: currentUser?.id || assignment.assigned_user_id || null,
+    final_duty_name: currentUser?.full_name || assignment.assigned_name || '',
+    final_duty_position: currentUser?.position || assignment.assigned_position || '',
     approval_ready: true,
+});
+
+const buildAssignmentForm = () => ({
+    duty_date: new Date().toISOString().split('T')[0],
+    duty_shift: 'morning',
+    duty_shift_label: 'เวรเช้า',
+    assigned_user_id: '',
+    assigned_name: '',
+    assigned_position: '',
+    notes: '',
 });
 
 export const DutyManagement = () => {
@@ -102,176 +153,257 @@ export const DutyManagement = () => {
     const currentUser = getCurrentUser();
     const { role } = usePermissions();
     const { staffList, loading: staffLoading } = useStaffList();
+
     const currentUserId = currentUser?.id || '';
     const currentUserName = currentUser?.full_name || '';
     const currentUserPosition = (currentUser as any)?.position || '';
+    const isScheduleManager = ['admin', 'director', 'deputy_director'].includes(role || '');
 
-    const [records, setRecords] = useState<DutyRecord[]>([]);
+    const [activeTab, setActiveTab] = useState('assignments');
     const [loading, setLoading] = useState(true);
     const [filterMonth, setFilterMonth] = useState('');
-    const [showDialog, setShowDialog] = useState(false);
-    const [editRecord, setEditRecord] = useState<DutyRecord | null>(null);
-    const [form, setForm] = useState(buildDefaultForm(currentUser));
+    const [assignments, setAssignments] = useState<DutyAssignment[]>([]);
+    const [records, setRecords] = useState<DutyRecord[]>([]);
+    const [showAssignmentDialog, setShowAssignmentDialog] = useState(false);
+    const [assignmentForm, setAssignmentForm] = useState(buildAssignmentForm());
+    const [showRecordDialog, setShowRecordDialog] = useState(false);
+    const [selectedAssignment, setSelectedAssignment] = useState<DutyAssignment | null>(null);
+    const [recordForm, setRecordForm] = useState<any>(null);
     const [swapDialogRecord, setSwapDialogRecord] = useState<DutyRecord | null>(null);
     const [swapTargetUserId, setSwapTargetUserId] = useState('');
     const [swapRequestNote, setSwapRequestNote] = useState('');
     const [respondDialogRecord, setRespondDialogRecord] = useState<DutyRecord | null>(null);
     const [swapResponseNote, setSwapResponseNote] = useState('');
 
-    const selectableStaff = useMemo(() => {
-        return staffList.filter(person => person.id !== currentUserId);
-    }, [staffList, currentUserId]);
-
-    const canModify = (r: DutyRecord): boolean => {
-        if (r.status === 'verified' || r.status === 'approved') return false;
-        if (!currentUser) return false;
-        if (role === 'admin' || role === 'director' || role === 'deputy_director') return true;
-        return r.recorder_name === currentUserName;
-    };
-
-    const canRequestSwap = (r: DutyRecord): boolean => {
-        if (!canModify(r)) return false;
-        return !r.swap_requested || r.swap_response_status === 'rejected';
-    };
-
-    const canRespondSwap = (r: DutyRecord): boolean => {
-        if (!currentUserId) return false;
-        if (!r.swap_requested) return false;
-        if (r.swap_response_status !== 'pending') return false;
-        return r.swap_target_user_id === currentUserId;
-    };
-
-    const canSubmitForApproval = (r: DutyRecord): boolean => {
-        if (r.status !== 'recorded') return false;
-        if (r.swap_requested && r.swap_response_status !== 'accepted') return false;
-        return !!r.approval_ready;
-    };
-
     useEffect(() => {
-        fetchRecords();
+        fetchAll();
     }, []);
 
-    const fetchRecords = async () => {
+    const fetchAll = async () => {
         setLoading(true);
         try {
-            const { data, error } = await (supabase.from('duty_records' as any) as any)
-                .select('*')
-                .order('duty_date', { ascending: false })
-                .limit(100);
+            const [assignmentRes, recordRes] = await Promise.all([
+                (supabase.from('duty_assignments' as any) as any)
+                    .select('*')
+                    .order('duty_date', { ascending: true })
+                    .order('duty_shift', { ascending: true })
+                    .limit(300),
+                (supabase.from('duty_records' as any) as any)
+                    .select('*')
+                    .order('duty_date', { ascending: false })
+                    .limit(300),
+            ]);
 
-            if (error) throw error;
-            if (data) setRecords(data);
+            if (assignmentRes.error) throw assignmentRes.error;
+            if (recordRes.error) throw recordRes.error;
+
+            setAssignments(assignmentRes.data || []);
+            setRecords(recordRes.data || []);
         } catch (e) {
             console.error(e);
-            toast({ title: 'โหลดข้อมูลบันทึกเวรไม่สำเร็จ', variant: 'destructive' });
+            toast({ title: 'โหลดข้อมูลเวรไม่สำเร็จ', variant: 'destructive' });
         } finally {
             setLoading(false);
         }
     };
 
-    const openAdd = () => {
-        setEditRecord(null);
-        setForm(buildDefaultForm(currentUser));
-        setShowDialog(true);
-    };
-
-    const openEdit = (r: DutyRecord) => {
-        setEditRecord(r);
-        setForm({
-            duty_date: r.duty_date,
-            duty_shift: r.duty_shift,
-            duty_shift_label: r.duty_shift_label || '',
-            recorder_name: r.recorder_name,
-            recorder_position: r.recorder_position || '',
-            students_present: r.students_present || 0,
-            students_absent: r.students_absent || 0,
-            incidents: r.incidents || '',
-            actions_taken: r.actions_taken || '',
-            remarks: r.remarks || '',
-            status: r.status,
-            swap_requested: !!r.swap_requested,
-            swap_requested_at: r.swap_requested_at || null,
-            swap_requested_by_user_id: r.swap_requested_by_user_id || null,
-            swap_requested_by_name: r.swap_requested_by_name || null,
-            swap_requested_by_position: r.swap_requested_by_position || null,
-            swap_target_user_id: r.swap_target_user_id || null,
-            swap_target_name: r.swap_target_name || null,
-            swap_target_position: r.swap_target_position || null,
-            swap_response_status: r.swap_response_status || 'not_required',
-            swap_responded_at: r.swap_responded_at || null,
-            swap_responded_by_user_id: r.swap_responded_by_user_id || null,
-            swap_response_note: r.swap_response_note || '',
-            final_duty_user_id: r.final_duty_user_id || null,
-            final_duty_name: r.final_duty_name || r.recorder_name,
-            final_duty_position: r.final_duty_position || r.recorder_position || '',
-            approval_ready: r.approval_ready ?? (!r.swap_requested || r.swap_response_status === 'accepted'),
+    const recordByAssignmentId = useMemo(() => {
+        const map = new Map<string, DutyRecord>();
+        records.forEach(record => {
+            if (record.assignment_id) {
+                map.set(record.assignment_id, record);
+            }
         });
-        setShowDialog(true);
+        return map;
+    }, [records]);
+
+    const myAssignments = useMemo(() => {
+        return assignments.filter(item => {
+            const matchOwner = item.assigned_user_id
+                ? item.assigned_user_id === currentUserId
+                : item.assigned_name === currentUserName;
+            return matchOwner && item.status !== 'cancelled';
+        });
+    }, [assignments, currentUserId, currentUserName]);
+
+    const filteredAssignments = useMemo(() => {
+        return assignments.filter(item => !filterMonth || item.duty_date.startsWith(filterMonth));
+    }, [assignments, filterMonth]);
+
+    const filteredRecords = useMemo(() => {
+        return records.filter(item => !filterMonth || item.duty_date.startsWith(filterMonth));
+    }, [records, filterMonth]);
+
+    const selectableStaff = useMemo(() => {
+        return staffList.filter(person => person.id !== currentUserId);
+    }, [staffList, currentUserId]);
+
+    const handleOpenAssignmentDialog = () => {
+        setAssignmentForm(buildAssignmentForm());
+        setShowAssignmentDialog(true);
     };
 
-    const handleSave = async () => {
-        if (!form.recorder_name) {
-            toast({ title: 'กรุณากรอกชื่อผู้บันทึก', variant: 'destructive' });
-            return;
-        }
-
-        if (form.swap_requested && !form.swap_target_user_id) {
-            toast({ title: 'กรุณาเลือกผู้รับเปลี่ยนเวร', variant: 'destructive' });
-            return;
-        }
-
-        if (form.swap_requested && form.swap_response_status !== 'accepted') {
-            toast({
-                title: 'ยังไม่สามารถส่งอนุมัติได้',
-                description: 'ต้องรอผู้รับเปลี่ยนเวรตอบตกลงก่อน',
-                variant: 'destructive',
-            });
+    const handleSaveAssignment = async () => {
+        const selectedStaff = staffList.find(person => person.id === assignmentForm.assigned_user_id);
+        if (!selectedStaff) {
+            toast({ title: 'กรุณาเลือกผู้เข้าเวร', variant: 'destructive' });
             return;
         }
 
         const payload = {
-            ...form,
-            approval_ready: form.swap_requested ? form.swap_response_status === 'accepted' : true,
-            final_duty_name: form.swap_requested ? form.final_duty_name : form.recorder_name,
-            final_duty_position: form.swap_requested ? form.final_duty_position : form.recorder_position,
-            final_duty_user_id: form.swap_requested ? form.final_duty_user_id : currentUserId || null,
-            swap_response_status: form.swap_requested ? form.swap_response_status : 'not_required',
+            duty_date: assignmentForm.duty_date,
+            duty_shift: assignmentForm.duty_shift,
+            duty_shift_label: assignmentForm.duty_shift_label,
+            assigned_user_id: selectedStaff.id,
+            assigned_name: selectedStaff.name,
+            assigned_position: selectedStaff.position,
+            assigned_by_user_id: currentUserId || null,
+            notes: assignmentForm.notes.trim() || null,
+            status: 'scheduled',
+            updated_at: new Date().toISOString(),
         };
 
-        try {
-            if (editRecord) {
-                const { error } = await (supabase.from('duty_records' as any) as any)
-                    .update(payload)
-                    .eq('id', editRecord.id);
-
-                if (error) throw error;
-                toast({ title: 'อัปเดตบันทึกเวรสำเร็จ' });
-            } else {
-                const { error } = await (supabase.from('duty_records' as any) as any).insert([payload]);
-                if (error) throw error;
-                toast({ title: 'บันทึกเวรสำเร็จ' });
-            }
-
-            setShowDialog(false);
-            fetchRecords();
-        } catch (e) {
-            console.error(e);
-            toast({ title: 'เกิดข้อผิดพลาด', variant: 'destructive' });
-        }
-    };
-
-    const handleDelete = async (id: string) => {
-        if (!confirm('ต้องการลบบันทึกเวรนี้?')) return;
-        const { error } = await (supabase.from('duty_records' as any) as any).delete().eq('id', id);
+        const { error } = await (supabase.from('duty_assignments' as any) as any).insert([payload]);
         if (error) {
-            toast({ title: 'ลบไม่สำเร็จ', variant: 'destructive' });
+            toast({ title: 'บันทึกกำหนดเข้าเวรไม่สำเร็จ', description: error.message, variant: 'destructive' });
             return;
         }
-        toast({ title: 'ลบสำเร็จ' });
-        fetchRecords();
+
+        toast({ title: 'กำหนดเข้าเวรสำเร็จ' });
+        setShowAssignmentDialog(false);
+        fetchAll();
+    };
+
+    const openRecordDialog = (assignment: DutyAssignment) => {
+        if (isPastDutyDate(assignment.duty_date)) {
+            toast({ title: 'วันที่เข้าเวรพ้นกำหนดแล้ว', description: 'ไม่สามารถเริ่มบันทึกหรือขอเปลี่ยนเวรย้อนหลังได้', variant: 'destructive' });
+            return;
+        }
+
+        const existingRecord = recordByAssignmentId.get(assignment.id);
+        setSelectedAssignment(assignment);
+
+        if (existingRecord) {
+            setRecordForm({
+                assignment_id: assignment.id,
+                duty_date: existingRecord.duty_date,
+                duty_shift: existingRecord.duty_shift,
+                duty_shift_label: existingRecord.duty_shift_label,
+                recorder_name: existingRecord.recorder_name,
+                recorder_position: existingRecord.recorder_position || '',
+                students_present: existingRecord.students_present || 0,
+                students_absent: existingRecord.students_absent || 0,
+                incidents: existingRecord.incidents || '',
+                actions_taken: existingRecord.actions_taken || '',
+                remarks: existingRecord.remarks || '',
+                status: existingRecord.status,
+                swap_requested: !!existingRecord.swap_requested,
+                swap_requested_at: existingRecord.swap_requested_at || null,
+                swap_requested_by_user_id: existingRecord.swap_requested_by_user_id || null,
+                swap_requested_by_name: existingRecord.swap_requested_by_name || null,
+                swap_requested_by_position: existingRecord.swap_requested_by_position || null,
+                swap_target_user_id: existingRecord.swap_target_user_id || null,
+                swap_target_name: existingRecord.swap_target_name || null,
+                swap_target_position: existingRecord.swap_target_position || null,
+                swap_response_status: existingRecord.swap_response_status || 'not_required',
+                swap_responded_at: existingRecord.swap_responded_at || null,
+                swap_responded_by_user_id: existingRecord.swap_responded_by_user_id || null,
+                swap_response_note: existingRecord.swap_response_note || '',
+                final_duty_user_id: existingRecord.final_duty_user_id || null,
+                final_duty_name: existingRecord.final_duty_name || existingRecord.recorder_name,
+                final_duty_position: existingRecord.final_duty_position || existingRecord.recorder_position || '',
+                approval_ready: existingRecord.approval_ready ?? (!existingRecord.swap_requested || existingRecord.swap_response_status === 'accepted'),
+            });
+        } else {
+            setRecordForm(buildRecordFormFromAssignment(assignment, currentUser));
+        }
+
+        setShowRecordDialog(true);
+    };
+
+    const handleSaveRecord = async () => {
+        if (!selectedAssignment || !recordForm) return;
+
+        if (isPastDutyDate(selectedAssignment.duty_date)) {
+            toast({ title: 'วันที่เข้าเวรพ้นกำหนดแล้ว', variant: 'destructive' });
+            return;
+        }
+
+        const existingRecord = recordByAssignmentId.get(selectedAssignment.id);
+
+        const payload = {
+            ...recordForm,
+            assignment_id: selectedAssignment.id,
+            duty_date: selectedAssignment.duty_date,
+            duty_shift: selectedAssignment.duty_shift,
+            duty_shift_label: selectedAssignment.duty_shift_label,
+            recorder_name: recordForm.recorder_name || currentUserName || selectedAssignment.assigned_name,
+            recorder_position: recordForm.recorder_position || currentUserPosition || selectedAssignment.assigned_position || '',
+            approval_ready: recordForm.swap_requested ? recordForm.swap_response_status === 'accepted' : true,
+            final_duty_name: recordForm.swap_requested ? recordForm.final_duty_name : (recordForm.recorder_name || currentUserName || selectedAssignment.assigned_name),
+            final_duty_position: recordForm.swap_requested ? recordForm.final_duty_position : (recordForm.recorder_position || currentUserPosition || selectedAssignment.assigned_position || ''),
+            final_duty_user_id: recordForm.swap_requested ? recordForm.final_duty_user_id : (currentUserId || selectedAssignment.assigned_user_id || null),
+            swap_response_status: recordForm.swap_requested ? recordForm.swap_response_status : 'not_required',
+        };
+
+        let error = null;
+
+        if (existingRecord) {
+            const res = await (supabase.from('duty_records' as any) as any).update(payload).eq('id', existingRecord.id);
+            error = res.error;
+        } else {
+            const res = await (supabase.from('duty_records' as any) as any).insert([payload]);
+            error = res.error;
+        }
+
+        if (error) {
+            toast({ title: 'บันทึกเวรไม่สำเร็จ', description: error.message, variant: 'destructive' });
+            return;
+        }
+
+        await (supabase.from('duty_assignments' as any) as any)
+            .update({ status: 'completed', updated_at: new Date().toISOString() })
+            .eq('id', selectedAssignment.id);
+
+        toast({ title: existingRecord ? 'อัปเดตบันทึกเวรสำเร็จ' : 'บันทึกเวรสำเร็จ' });
+        setShowRecordDialog(false);
+        setSelectedAssignment(null);
+        setRecordForm(null);
+        fetchAll();
+    };
+
+    const canRequestSwap = (assignment: DutyAssignment, record?: DutyRecord) => {
+        if (isPastDutyDate(assignment.duty_date)) return false;
+        if (!record) return false;
+        if (record.status === 'verified' || record.status === 'approved') return false;
+        const belongsToMe = assignment.assigned_user_id
+            ? assignment.assigned_user_id === currentUserId
+            : assignment.assigned_name === currentUserName;
+        if (!belongsToMe && !isScheduleManager) return false;
+        return !record.swap_requested || record.swap_response_status === 'rejected';
+    };
+
+    const canRespondSwap = (record: DutyRecord, assignment?: DutyAssignment) => {
+        if (!assignment || isPastDutyDate(assignment.duty_date)) return false;
+        if (!currentUserId) return false;
+        if (!record.swap_requested) return false;
+        if (record.swap_response_status !== 'pending') return false;
+        return record.swap_target_user_id === currentUserId;
+    };
+
+    const canSubmitForApproval = (record: DutyRecord, assignment?: DutyAssignment) => {
+        if (!assignment || isPastDutyDate(assignment.duty_date)) return false;
+        if (record.status !== 'recorded') return false;
+        if (record.swap_requested && record.swap_response_status !== 'accepted') return false;
+        return !!record.approval_ready;
     };
 
     const openSwapDialog = (record: DutyRecord) => {
+        const assignment = assignments.find(item => item.id === record.assignment_id);
+        if (!assignment || isPastDutyDate(assignment.duty_date)) {
+            toast({ title: 'วันที่เข้าเวรพ้นกำหนดแล้ว', description: 'ไม่สามารถเปลี่ยนเวรย้อนหลังได้', variant: 'destructive' });
+            return;
+        }
         setSwapDialogRecord(record);
         setSwapTargetUserId(record.swap_target_user_id || '');
         setSwapRequestNote(record.swap_response_status === 'rejected' ? '' : record.swap_response_note || '');
@@ -279,20 +411,24 @@ export const DutyManagement = () => {
 
     const handleSwapRequest = async () => {
         if (!swapDialogRecord) return;
+        const assignment = assignments.find(item => item.id === swapDialogRecord.assignment_id);
+        if (!assignment || isPastDutyDate(assignment.duty_date)) {
+            toast({ title: 'วันที่เข้าเวรพ้นกำหนดแล้ว', variant: 'destructive' });
+            return;
+        }
+
         const selected = selectableStaff.find(person => person.id === swapTargetUserId);
         if (!selected) {
             toast({ title: 'กรุณาเลือกผู้รับเปลี่ยนเวร', variant: 'destructive' });
             return;
         }
 
-        const requestedAt = new Date().toISOString();
-
         const payload = {
             swap_requested: true,
-            swap_requested_at: requestedAt,
+            swap_requested_at: new Date().toISOString(),
             swap_requested_by_user_id: currentUserId || null,
-            swap_requested_by_name: currentUserName,
-            swap_requested_by_position: currentUserPosition,
+            swap_requested_by_name: currentUserName || swapDialogRecord.recorder_name,
+            swap_requested_by_position: currentUserPosition || swapDialogRecord.recorder_position,
             swap_target_user_id: selected.id,
             swap_target_name: selected.name,
             swap_target_position: selected.position,
@@ -311,15 +447,15 @@ export const DutyManagement = () => {
             .eq('id', swapDialogRecord.id);
 
         if (error) {
-            toast({ title: 'ส่งคำขอเปลี่ยนเวรไม่สำเร็จ', variant: 'destructive' });
+            toast({ title: 'ส่งคำขอเปลี่ยนเวรไม่สำเร็จ', description: error.message, variant: 'destructive' });
             return;
         }
 
-        toast({ title: 'ส่งคำขอเปลี่ยนเวรแล้ว', description: `รอ ${selected.name} ตอบตกลง` });
+        toast({ title: 'ส่งคำขอเปลี่ยนเวรแล้ว' });
         setSwapDialogRecord(null);
         setSwapTargetUserId('');
         setSwapRequestNote('');
-        fetchRecords();
+        fetchAll();
     };
 
     const openRespondDialog = (record: DutyRecord) => {
@@ -329,6 +465,11 @@ export const DutyManagement = () => {
 
     const handleSwapResponse = async (decision: 'accepted' | 'rejected') => {
         if (!respondDialogRecord) return;
+        const assignment = assignments.find(item => item.id === respondDialogRecord.assignment_id);
+        if (!assignment || isPastDutyDate(assignment.duty_date)) {
+            toast({ title: 'วันที่เข้าเวรพ้นกำหนดแล้ว', variant: 'destructive' });
+            return;
+        }
 
         const payload = decision === 'accepted'
             ? {
@@ -357,25 +498,20 @@ export const DutyManagement = () => {
             .eq('id', respondDialogRecord.id);
 
         if (error) {
-            toast({ title: 'บันทึกการตอบรับไม่สำเร็จ', variant: 'destructive' });
+            toast({ title: 'บันทึกการตอบรับไม่สำเร็จ', description: error.message, variant: 'destructive' });
             return;
         }
 
-        toast({
-            title: decision === 'accepted' ? 'ตอบตกลงรับเปลี่ยนเวรแล้ว' : 'ปฏิเสธการรับเปลี่ยนเวรแล้ว',
-        });
+        toast({ title: decision === 'accepted' ? 'ตอบตกลงรับเวรแล้ว' : 'ปฏิเสธการรับเวรแล้ว' });
         setRespondDialogRecord(null);
         setSwapResponseNote('');
-        fetchRecords();
+        fetchAll();
     };
 
     const handleSubmitForApproval = async (record: DutyRecord) => {
-        if (!canSubmitForApproval(record)) {
-            toast({
-                title: 'ยังไม่สามารถส่งอนุมัติได้',
-                description: 'ต้องให้ผู้รับเปลี่ยนเวรตอบตกลงก่อน และข้อมูลผู้ปฏิบัติเวรสุดท้ายต้องครบถ้วน',
-                variant: 'destructive',
-            });
+        const assignment = assignments.find(item => item.id === record.assignment_id);
+        if (!canSubmitForApproval(record, assignment)) {
+            toast({ title: 'ยังไม่สามารถส่งอนุมัติได้', description: 'ต้องตอบตกลงการเปลี่ยนเวรก่อน และวันเวรต้องยังไม่พ้นกำหนด', variant: 'destructive' });
             return;
         }
 
@@ -384,265 +520,358 @@ export const DutyManagement = () => {
             .eq('id', record.id);
 
         if (error) {
-            toast({ title: 'ส่งอนุมัติไม่สำเร็จ', variant: 'destructive' });
+            toast({ title: 'ส่งอนุมัติไม่สำเร็จ', description: error.message, variant: 'destructive' });
             return;
         }
 
         toast({ title: 'ส่งบันทึกเวรเข้าอนุมัติตามลำดับแล้ว' });
-        fetchRecords();
+        fetchAll();
     };
 
-    const filtered = records.filter(r => !filterMonth || r.duty_date?.startsWith(filterMonth));
+    const renderAssignmentCard = (assignment: DutyAssignment, forMine = false) => {
+        const record = recordByAssignmentId.get(assignment.id);
+        const dutyExpired = isPastDutyDate(assignment.duty_date);
 
-    return (
-        <div className="p-6 space-y-6">
-            <div className="flex justify-between items-center mb-6">
-                <div>
-                    <h1 className="text-2xl font-bold flex items-center gap-2">
-                        <CalendarCheck className="w-6 h-6 text-green-600" /> บันทึกเวรประจำวัน
-                    </h1>
-                    <p className="text-muted-foreground text-sm">รายงานเวร บันทึกเหตุการณ์ และจัดการคำขอเปลี่ยนเวร</p>
-                </div>
-                <Button onClick={openAdd} className="gap-2">
-                    <Plus className="w-4 h-4" /> บันทึกเวร
-                </Button>
-            </div>
-
-            <div className="flex flex-col md:flex-row md:items-center gap-3 mb-4">
-                <Input type="month" value={filterMonth} onChange={e => setFilterMonth(e.target.value)} className="w-40" />
-                <span className="text-sm text-muted-foreground self-center">{filtered.length} รายการ</span>
-                <div className="md:ml-auto rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
-                    ปุ่ม <span className="font-semibold">เปลี่ยนเวร</span> จะแสดงในแต่ละรายการบันทึกเวรที่ยังไม่ถูกอนุมัติ และผู้มีสิทธิ์แก้ไขรายการนั้นสามารถกดได้
-                </div>
-            </div>
-
-            <Card>
-                <CardContent className="p-0">
-                    {loading ? (
-                        <div className="p-12 text-center text-muted-foreground">กำลังโหลด...</div>
-                    ) : filtered.length === 0 ? (
-                        <div className="p-12 text-center space-y-3">
-                            <CalendarCheck className="w-12 h-12 mx-auto text-muted-foreground/40" />
-                            <p className="text-muted-foreground">ยังไม่มีบันทึกเวร</p>
-                            <p className="text-xs text-muted-foreground">
-                                เมื่อสร้างบันทึกเวรแล้ว ระบบจะแสดงปุ่ม <span className="font-semibold text-foreground">เปลี่ยนเวร</span> ในรายการที่ยังไม่ถูกตรวจสอบหรืออนุมัติ
+        return (
+            <Card key={assignment.id} className="border">
+                <CardContent className="p-4 space-y-4">
+                    <div className="flex flex-col lg:flex-row lg:justify-between gap-4">
+                        <div className="space-y-2">
+                            <div className="flex flex-wrap items-center gap-2">
+                                <h3 className="font-semibold">
+                                    {new Date(assignment.duty_date).toLocaleDateString('th-TH')} • {assignment.duty_shift_label || SHIFT_MAP[assignment.duty_shift] || assignment.duty_shift}
+                                </h3>
+                                <Badge variant="outline">{ASSIGNMENT_STATUS_MAP[assignment.status] || assignment.status}</Badge>
+                                {dutyExpired && <Badge variant="destructive">พ้นกำหนด</Badge>}
+                            </div>
+                            <p className="text-sm text-muted-foreground">
+                                ผู้เข้าเวร: <span className="font-medium text-foreground">{assignment.assigned_name}</span>
+                                {assignment.assigned_position ? ` (${assignment.assigned_position})` : ''}
                             </p>
+                            {assignment.notes && (
+                                <p className="text-sm text-muted-foreground">หมายเหตุ: {assignment.notes}</p>
+                            )}
                         </div>
-                    ) : (
-                        <div className="space-y-4 p-4">
-                            {filtered.map((r) => {
-                                const swapStatus = r.swap_response_status || (r.swap_requested ? 'pending' : 'not_required');
-                                const finalName = r.final_duty_name || r.recorder_name;
-                                const finalPosition = r.final_duty_position || r.recorder_position;
 
-                                return (
-                                    <Card key={r.id} className="border">
-                                        <CardContent className="p-4 space-y-4">
-                                            <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
-                                                <div className="space-y-2">
-                                                    <div className="flex flex-wrap items-center gap-2">
-                                                        <h3 className="font-semibold text-base">
-                                                            {new Date(r.duty_date).toLocaleDateString('th-TH')} • {r.duty_shift_label || SHIFT_MAP[r.duty_shift] || r.duty_shift}
-                                                        </h3>
-                                                        <Badge variant="outline">{STATUS_MAP[r.status] || r.status}</Badge>
-                                                        <Badge variant={swapStatus === 'accepted' ? 'default' : 'outline'}>
-                                                            {SWAP_STATUS_MAP[swapStatus] || swapStatus}
-                                                        </Badge>
-                                                    </div>
-                                                    <div className="text-sm text-muted-foreground">
-                                                        ผู้บันทึกเวร: <span className="font-medium text-foreground">{r.recorder_name}</span>
-                                                        {r.recorder_position ? ` (${r.recorder_position})` : ''}
-                                                    </div>
-                                                    <div className="text-sm text-muted-foreground">
-                                                        นักเรียนมา/ขาด: <span className="font-medium text-foreground">{r.students_present}/{r.students_absent}</span>
-                                                    </div>
-                                                    <div className="text-sm text-muted-foreground">
-                                                        เหตุการณ์: <span className="text-foreground">{r.incidents || '-'}</span>
-                                                    </div>
-                                                </div>
+                        <div className="flex flex-wrap gap-2 items-center">
+                            {!record && (
+                                <Button
+                                    size="sm"
+                                    className="gap-2"
+                                    onClick={() => openRecordDialog(assignment)}
+                                    disabled={dutyExpired}
+                                >
+                                    <ClipboardPen className="w-4 h-4" />
+                                    บันทึกเวร
+                                </Button>
+                            )}
 
-                                                <div className="flex flex-wrap gap-2 items-center">
-                                                    <span className="text-xs font-medium text-muted-foreground">การดำเนินการ:</span>
-                                                    {canRequestSwap(r) && (
-                                                        <Button variant="outline" size="sm" className="gap-2" onClick={() => openSwapDialog(r)}>
-                                                            <RefreshCcw className="w-4 h-4" />
-                                                            เปลี่ยนเวร
-                                                        </Button>
-                                                    )}
+                            {record && (
+                                <>
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        className="gap-2"
+                                        onClick={() => openRecordDialog(assignment)}
+                                        disabled={dutyExpired}
+                                    >
+                                        <Edit2 className="w-4 h-4" />
+                                        แก้ไขบันทึกเวร
+                                    </Button>
 
-                                                    {canRespondSwap(r) && (
-                                                        <Button variant="secondary" size="sm" className="gap-2" onClick={() => openRespondDialog(r)}>
-                                                            <CheckCheck className="w-4 h-4" />
-                                                            ตอบรับเปลี่ยนเวร
-                                                        </Button>
-                                                    )}
+                                    {canRequestSwap(assignment, record) && (
+                                        <Button variant="outline" size="sm" className="gap-2" onClick={() => openSwapDialog(record)}>
+                                            <RefreshCcw className="w-4 h-4" />
+                                            เปลี่ยนเวร
+                                        </Button>
+                                    )}
 
-                                                    {canSubmitForApproval(r) && (
-                                                        <Button size="sm" className="gap-2" onClick={() => handleSubmitForApproval(r)}>
-                                                            <Send className="w-4 h-4" />
-                                                            ส่งอนุมัติ
-                                                        </Button>
-                                                    )}
+                                    {canRespondSwap(record, assignment) && (
+                                        <Button variant="secondary" size="sm" className="gap-2" onClick={() => openRespondDialog(record)}>
+                                            <CheckCheck className="w-4 h-4" />
+                                            ตอบรับเปลี่ยนเวร
+                                        </Button>
+                                    )}
 
-                                                    {r.status === 'verified' || r.status === 'approved' ? (
-                                                        <span
-                                                            className="text-xs text-muted-foreground px-2 self-center"
-                                                            title={r.status === 'approved' ? 'อนุมัติแล้ว — ไม่สามารถแก้ไขหรือลบได้' : 'ตรวจสอบแล้ว — ไม่สามารถแก้ไขหรือลบได้'}
-                                                        >
-                                                            🔒 ล็อกแล้ว
-                                                        </span>
-                                                    ) : canModify(r) ? (
-                                                        <>
-                                                            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(r)} title="แก้ไข">
-                                                                <Edit2 className="w-3.5 h-3.5" />
-                                                            </Button>
-                                                            <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => handleDelete(r.id)} title="ลบ">
-                                                                <Trash2 className="w-3.5 h-3.5" />
-                                                            </Button>
-                                                        </>
-                                                    ) : null}
-                                                </div>
-                                            </div>
+                                    {canSubmitForApproval(record, assignment) && (
+                                        <Button size="sm" className="gap-2" onClick={() => handleSubmitForApproval(record)}>
+                                            <Send className="w-4 h-4" />
+                                            ส่งอนุมัติ
+                                        </Button>
+                                    )}
+                                </>
+                            )}
+                        </div>
+                    </div>
 
-                                            <div className="grid md:grid-cols-2 gap-4">
-                                                <div className="rounded-lg border bg-muted/20 p-3 space-y-2">
-                                                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">เจ้าของเวรเดิม</p>
-                                                    <p className="text-sm font-medium">{r.recorder_name}</p>
-                                                    <p className="text-xs text-muted-foreground">{r.recorder_position || '-'}</p>
-                                                </div>
-                                                <div className="rounded-lg border bg-emerald-50 p-3 space-y-2">
-                                                    <p className="text-xs font-semibold text-emerald-700 uppercase tracking-wide">ผู้ปฏิบัติเวรสุดท้าย</p>
-                                                    <p className="text-sm font-medium text-emerald-900">{finalName || '-'}</p>
-                                                    <p className="text-xs text-emerald-700">{finalPosition || '-'}</p>
-                                                </div>
-                                            </div>
+                    {record && (
+                        <div className="grid md:grid-cols-2 gap-4">
+                            <div className="rounded-lg border bg-muted/20 p-3">
+                                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">สถานะบันทึกเวร</p>
+                                <div className="flex flex-wrap gap-2 mb-2">
+                                    <Badge variant="outline">{STATUS_MAP[record.status] || record.status}</Badge>
+                                    <Badge variant={record.swap_response_status === 'accepted' ? 'default' : 'outline'}>
+                                        {SWAP_STATUS_MAP[record.swap_response_status || 'not_required'] || record.swap_response_status}
+                                    </Badge>
+                                </div>
+                                <p className="text-sm text-muted-foreground">เหตุการณ์: <span className="text-foreground">{record.incidents || '-'}</span></p>
+                            </div>
+                            <div className="rounded-lg border bg-emerald-50 p-3">
+                                <p className="text-xs font-semibold text-emerald-700 uppercase tracking-wide mb-2">ผู้ปฏิบัติเวรสุดท้าย</p>
+                                <p className="text-sm font-medium text-emerald-900">{record.final_duty_name || record.recorder_name}</p>
+                                <p className="text-xs text-emerald-700">{record.final_duty_position || record.recorder_position || '-'}</p>
+                                <p className="text-xs text-emerald-700 mt-2">
+                                    {record.approval_ready ? 'พร้อมส่งอนุมัติ' : 'ยังส่งอนุมัติไม่ได้จนกว่าผู้รับเวรจะตอบตกลง'}
+                                </p>
+                            </div>
+                        </div>
+                    )}
 
-                                            {r.swap_requested && (
-                                                <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 space-y-2">
-                                                    <div className="flex flex-wrap items-center gap-2">
-                                                        <Badge variant="outline">คำขอเปลี่ยนเวร</Badge>
-                                                        <span className="text-sm text-amber-900">
-                                                            {r.swap_requested_by_name || r.recorder_name} ขอเปลี่ยนเวรให้ {r.swap_target_name || '-'}
-                                                        </span>
-                                                    </div>
-                                                    <p className="text-sm text-amber-900">
-                                                        สถานะผู้รับเวร: <span className="font-semibold">{SWAP_STATUS_MAP[swapStatus] || swapStatus}</span>
-                                                    </p>
-                                                    {r.swap_target_position && (
-                                                        <p className="text-xs text-amber-800">ผู้รับเปลี่ยนเวร: {r.swap_target_name} ({r.swap_target_position})</p>
-                                                    )}
-                                                    {r.swap_response_note && (
-                                                        <p className="text-xs text-amber-800">หมายเหตุ: {r.swap_response_note}</p>
-                                                    )}
-                                                    <p className="text-xs text-amber-800">
-                                                        {r.approval_ready
-                                                            ? 'พร้อมส่งอนุมัติตามลำดับ'
-                                                            : 'ยังส่งอนุมัติไม่ได้จนกว่าผู้รับเปลี่ยนเวรจะตอบตกลง'}
-                                                    </p>
-                                                </div>
-                                            )}
-                                        </CardContent>
-                                    </Card>
-                                );
-                            })}
+                    {forMine && !record && !dutyExpired && (
+                        <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900">
+                            เวรนี้เป็นของคุณ สามารถเข้าไปบันทึกเหตุการณ์หรือขอเปลี่ยนเวรได้ภายในวันที่กำหนด
+                        </div>
+                    )}
+
+                    {dutyExpired && (
+                        <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-900">
+                            วันที่เข้าเวรพ้นกำหนดแล้ว จึงไม่สามารถเปลี่ยนเวรกับผู้อื่นได้
                         </div>
                     )}
                 </CardContent>
             </Card>
+        );
+    };
 
-            <Dialog open={showDialog} onOpenChange={setShowDialog}>
+    return (
+        <div className="p-6 space-y-6">
+            <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+                <div>
+                    <h1 className="text-2xl font-bold flex items-center gap-2">
+                        <CalendarCheck className="w-6 h-6 text-green-600" /> จัดการเวรประจำวัน
+                    </h1>
+                    <p className="text-muted-foreground text-sm">
+                        แยกการทำงานเป็น 2 ส่วน: กำหนดเข้าเวรล่วงหน้า และบันทึกเวรตามวันที่ที่ถูกกำหนด
+                    </p>
+                </div>
+                <div className="flex gap-3 items-center">
+                    <Input type="month" value={filterMonth} onChange={e => setFilterMonth(e.target.value)} className="w-44" />
+                    {isScheduleManager && (
+                        <Button onClick={handleOpenAssignmentDialog} className="gap-2">
+                            <UserPlus className="w-4 h-4" />
+                            กำหนดเข้าเวร
+                        </Button>
+                    )}
+                </div>
+            </div>
+
+            <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
+                <TabsList className="grid w-full grid-cols-2">
+                    <TabsTrigger value="assignments">กำหนดเข้าเวร</TabsTrigger>
+                    <TabsTrigger value="records">บันทึกเวร</TabsTrigger>
+                </TabsList>
+
+                <TabsContent value="assignments" className="space-y-4">
+                    <Card>
+                        <CardContent className="p-4 space-y-2">
+                            <p className="font-medium">ภาพรวมการกำหนดเข้าเวร</p>
+                            <p className="text-sm text-muted-foreground">
+                                ต้องกำหนดวันและผู้เข้าเวรก่อน จึงจะสามารถไปบันทึกเหตุการณ์ในแท็บ “บันทึกเวร” ได้
+                            </p>
+                        </CardContent>
+                    </Card>
+
+                    <div className="grid xl:grid-cols-2 gap-6">
+                        <div className="space-y-4">
+                            <div>
+                                <h2 className="text-lg font-semibold">เวรของฉันตามปฏิทินงาน</h2>
+                                <p className="text-sm text-muted-foreground">แสดงเฉพาะวันที่คุณต้องเข้าเวร และสามารถกดไปบันทึกหรือขอเปลี่ยนเวรได้</p>
+                            </div>
+
+                            {loading ? (
+                                <Card><CardContent className="p-8 text-center text-muted-foreground">กำลังโหลด...</CardContent></Card>
+                            ) : myAssignments.length === 0 ? (
+                                <Card><CardContent className="p-8 text-center text-muted-foreground">ยังไม่มีเวรที่กำหนดให้คุณ</CardContent></Card>
+                            ) : (
+                                myAssignments.map(item => renderAssignmentCard(item, true))
+                            )}
+                        </div>
+
+                        <div className="space-y-4">
+                            <div>
+                                <h2 className="text-lg font-semibold">รายการกำหนดเข้าเวรทั้งหมด</h2>
+                                <p className="text-sm text-muted-foreground">ใช้สำหรับตรวจสอบเวรที่ถูกมอบหมายในแต่ละวัน</p>
+                            </div>
+
+                            {loading ? (
+                                <Card><CardContent className="p-8 text-center text-muted-foreground">กำลังโหลด...</CardContent></Card>
+                            ) : filteredAssignments.length === 0 ? (
+                                <Card><CardContent className="p-8 text-center text-muted-foreground">ยังไม่มีรายการกำหนดเข้าเวร</CardContent></Card>
+                            ) : (
+                                filteredAssignments.map(item => renderAssignmentCard(item))
+                            )}
+                        </div>
+                    </div>
+                </TabsContent>
+
+                <TabsContent value="records" className="space-y-4">
+                    <Card>
+                        <CardContent className="p-4 space-y-2">
+                            <p className="font-medium">บันทึกเวรตามวันที่ได้รับมอบหมาย</p>
+                            <p className="text-sm text-muted-foreground">
+                                จะบันทึกเหตุการณ์ได้เฉพาะเวรที่ถูกกำหนดไว้แล้วเท่านั้น และหากวันที่เวรพ้นกำหนด จะไม่สามารถเปลี่ยนเวรกับผู้อื่นได้
+                            </p>
+                        </CardContent>
+                    </Card>
+
+                    {loading ? (
+                        <Card><CardContent className="p-8 text-center text-muted-foreground">กำลังโหลด...</CardContent></Card>
+                    ) : filteredRecords.length === 0 ? (
+                        <Card><CardContent className="p-8 text-center text-muted-foreground">ยังไม่มีบันทึกเวร</CardContent></Card>
+                    ) : (
+                        <div className="space-y-4">
+                            {filteredRecords.map(record => {
+                                const assignment = assignments.find(item => item.id === record.assignment_id);
+                                const fallbackAssignment: DutyAssignment | undefined = assignment;
+                                return renderAssignmentCard(
+                                    fallbackAssignment || {
+                                        id: record.assignment_id || record.id,
+                                        duty_date: record.duty_date,
+                                        duty_shift: record.duty_shift,
+                                        duty_shift_label: record.duty_shift_label,
+                                        assigned_user_id: record.final_duty_user_id || null,
+                                        assigned_name: record.final_duty_name || record.recorder_name,
+                                        assigned_position: record.final_duty_position || record.recorder_position,
+                                        status: 'scheduled',
+                                    } as DutyAssignment
+                                );
+                            })}
+                        </div>
+                    )}
+                </TabsContent>
+            </Tabs>
+
+            <Dialog open={showAssignmentDialog} onOpenChange={setShowAssignmentDialog}>
                 <DialogContent className="max-w-lg">
                     <DialogHeader>
-                        <DialogTitle>{editRecord ? 'แก้ไขบันทึกเวร' : 'บันทึกเวรประจำวัน'}</DialogTitle>
+                        <DialogTitle>กำหนดเข้าเวร</DialogTitle>
                     </DialogHeader>
-                    <div className="space-y-3">
+                    <div className="space-y-4">
                         <div className="grid grid-cols-2 gap-3">
                             <div>
-                                <Label>วันที่ *</Label>
-                                <Input type="date" value={form.duty_date} onChange={e => setForm(p => ({ ...p, duty_date: e.target.value }))} />
+                                <Label>วันที่เข้าเวร *</Label>
+                                <Input
+                                    type="date"
+                                    value={assignmentForm.duty_date}
+                                    onChange={e => setAssignmentForm(p => ({ ...p, duty_date: e.target.value }))}
+                                />
                             </div>
                             <div>
-                                <Label>ช่วงเวร</Label>
-                                <Select value={form.duty_shift} onValueChange={v => setForm(p => ({ ...p, duty_shift: v, duty_shift_label: `เวร${SHIFT_MAP[v]}` }))}>
+                                <Label>ช่วงเวร *</Label>
+                                <Select
+                                    value={assignmentForm.duty_shift}
+                                    onValueChange={v => setAssignmentForm(p => ({ ...p, duty_shift: v, duty_shift_label: `เวร${SHIFT_MAP[v]}` }))}
+                                >
                                     <SelectTrigger><SelectValue /></SelectTrigger>
                                     <SelectContent>
-                                        {Object.entries(SHIFT_MAP).map(([k, v]) => <SelectItem key={k} value={k}>เวร{v}</SelectItem>)}
+                                        {Object.entries(SHIFT_MAP).map(([k, v]) => (
+                                            <SelectItem key={k} value={k}>เวร{v}</SelectItem>
+                                        ))}
                                     </SelectContent>
                                 </Select>
                             </div>
                         </div>
+
                         <div>
-                            <Label>ผู้บันทึกเวร *</Label>
-                            <Input
-                                value={form.recorder_name}
-                                readOnly={!editRecord}
-                                onChange={e => setForm(p => ({ ...p, recorder_name: e.target.value }))}
-                                placeholder="ชื่อผู้บันทึก"
-                                className={!editRecord ? 'bg-muted cursor-not-allowed' : ''}
-                            />
-                            {form.recorder_position && (
-                                <p className="text-xs text-muted-foreground mt-1">ตำแหน่ง: {form.recorder_position}</p>
-                            )}
-                            {!editRecord && currentUserName && (
-                                <p className="text-xs text-muted-foreground mt-1">✅ ใช้ชื่อจากบัญชีที่ login</p>
-                            )}
-                        </div>
-                        <div className="grid grid-cols-2 gap-3">
-                            <div>
-                                <Label>นักเรียนมา</Label>
-                                <Input type="number" value={form.students_present} onChange={e => setForm(p => ({ ...p, students_present: +e.target.value }))} />
-                            </div>
-                            <div>
-                                <Label>นักเรียนขาด</Label>
-                                <Input type="number" value={form.students_absent} onChange={e => setForm(p => ({ ...p, students_absent: +e.target.value }))} />
-                            </div>
-                        </div>
-                        <div>
-                            <Label>เหตุการณ์ที่เกิดขึ้น</Label>
-                            <Textarea value={form.incidents} onChange={e => setForm(p => ({ ...p, incidents: e.target.value }))} placeholder="บันทึกเหตุการณ์..." rows={2} />
-                        </div>
-                        <div>
-                            <Label>การดำเนินการ</Label>
-                            <Textarea value={form.actions_taken} onChange={e => setForm(p => ({ ...p, actions_taken: e.target.value }))} placeholder="การดำเนินการที่ทำ..." rows={2} />
-                        </div>
-                        <div>
-                            <Label>หมายเหตุ</Label>
-                            <Input value={form.remarks} onChange={e => setForm(p => ({ ...p, remarks: e.target.value }))} placeholder="หมายเหตุ" />
-                        </div>
-                        <div className="rounded-lg border border-dashed p-3 bg-muted/20 space-y-2">
-                            <p className="text-sm font-medium">สถานะเปลี่ยนเวร</p>
-                            <p className="text-xs text-muted-foreground">
-                                หากมีการขอเปลี่ยนเวร ต้องใช้ปุ่ม “เปลี่ยนเวร” จากรายการบันทึก และรอผู้รับเวรตอบตกลงก่อน จึงจะกดส่งอนุมัติได้
-                            </p>
-                            <div className="flex flex-wrap gap-2">
-                                <Badge variant="outline">{SWAP_STATUS_MAP[form.swap_response_status] || form.swap_response_status}</Badge>
-                                <Badge variant="outline">{form.approval_ready ? 'พร้อมส่งอนุมัติ' : 'ยังไม่พร้อมส่งอนุมัติ'}</Badge>
-                            </div>
-                        </div>
-                        <div>
-                            <Label>สถานะ</Label>
-                            <Select value={form.status} onValueChange={v => setForm(p => ({ ...p, status: v }))}>
-                                <SelectTrigger><SelectValue /></SelectTrigger>
+                            <Label>ผู้ที่ต้องเข้าเวร *</Label>
+                            <Select
+                                value={assignmentForm.assigned_user_id}
+                                onValueChange={v => {
+                                    const selected = staffList.find(item => item.id === v);
+                                    setAssignmentForm(p => ({
+                                        ...p,
+                                        assigned_user_id: v,
+                                        assigned_name: selected?.name || '',
+                                        assigned_position: selected?.position || '',
+                                    }));
+                                }}
+                            >
+                                <SelectTrigger>
+                                    <SelectValue placeholder={staffLoading ? 'กำลังโหลดรายชื่อ...' : 'เลือกบุคลากร'} />
+                                </SelectTrigger>
                                 <SelectContent>
-                                    {Object.entries(STATUS_MAP).map(([k, v]) => (
-                                        <SelectItem
-                                            key={k}
-                                            value={k}
-                                            disabled={k === 'verified' && form.swap_requested && form.swap_response_status !== 'accepted'}
-                                        >
-                                            {v}
+                                    {staffList.map(person => (
+                                        <SelectItem key={person.id} value={person.id}>
+                                            {person.name}{person.position ? ` (${person.position})` : ''}
                                         </SelectItem>
                                     ))}
                                 </SelectContent>
                             </Select>
-                            {form.swap_requested && form.swap_response_status !== 'accepted' && (
-                                <p className="text-xs text-destructive mt-1">มีคำขอเปลี่ยนเวรค้างอยู่ จึงยังเปลี่ยนสถานะเป็น “ตรวจสอบแล้ว” ไม่ได้</p>
-                            )}
+                        </div>
+
+                        <div>
+                            <Label>หมายเหตุ</Label>
+                            <Textarea
+                                value={assignmentForm.notes}
+                                onChange={e => setAssignmentForm(p => ({ ...p, notes: e.target.value }))}
+                                placeholder="เช่น กำหนดเวรพิเศษ / เวรประจำวัน / เวรแทน"
+                                rows={3}
+                            />
                         </div>
                     </div>
                     <DialogFooter>
-                        <Button variant="outline" onClick={() => setShowDialog(false)}>ยกเลิก</Button>
-                        <Button onClick={handleSave}>{editRecord ? 'บันทึก' : 'เพิ่มบันทึก'}</Button>
+                        <Button variant="outline" onClick={() => setShowAssignmentDialog(false)}>ยกเลิก</Button>
+                        <Button onClick={handleSaveAssignment}>บันทึกกำหนดเข้าเวร</Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            <Dialog open={showRecordDialog} onOpenChange={setShowRecordDialog}>
+                <DialogContent className="max-w-2xl">
+                    <DialogHeader>
+                        <DialogTitle>บันทึกเวรตามวันที่กำหนด</DialogTitle>
+                    </DialogHeader>
+                    {recordForm && selectedAssignment && (
+                        <div className="space-y-4">
+                            <div className="rounded-lg border bg-muted/20 p-3">
+                                <p className="text-sm font-medium">
+                                    วันที่ {new Date(selectedAssignment.duty_date).toLocaleDateString('th-TH')} • {selectedAssignment.duty_shift_label}
+                                </p>
+                                <p className="text-xs text-muted-foreground mt-1">
+                                    เวรของ {selectedAssignment.assigned_name}{selectedAssignment.assigned_position ? ` (${selectedAssignment.assigned_position})` : ''}
+                                </p>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-3">
+                                <div>
+                                    <Label>นักเรียนมา</Label>
+                                    <Input type="number" value={recordForm.students_present} onChange={e => setRecordForm((p: any) => ({ ...p, students_present: +e.target.value }))} />
+                                </div>
+                                <div>
+                                    <Label>นักเรียนขาด</Label>
+                                    <Input type="number" value={recordForm.students_absent} onChange={e => setRecordForm((p: any) => ({ ...p, students_absent: +e.target.value }))} />
+                                </div>
+                            </div>
+
+                            <div>
+                                <Label>เหตุการณ์ที่เกิดขึ้น</Label>
+                                <Textarea value={recordForm.incidents} onChange={e => setRecordForm((p: any) => ({ ...p, incidents: e.target.value }))} rows={3} />
+                            </div>
+
+                            <div>
+                                <Label>การดำเนินการ</Label>
+                                <Textarea value={recordForm.actions_taken} onChange={e => setRecordForm((p: any) => ({ ...p, actions_taken: e.target.value }))} rows={3} />
+                            </div>
+
+                            <div>
+                                <Label>หมายเหตุ</Label>
+                                <Input value={recordForm.remarks} onChange={e => setRecordForm((p: any) => ({ ...p, remarks: e.target.value }))} />
+                            </div>
+                        </div>
+                    )}
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setShowRecordDialog(false)}>ยกเลิก</Button>
+                        <Button onClick={handleSaveRecord}>บันทึกเวร</Button>
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
@@ -650,7 +879,7 @@ export const DutyManagement = () => {
             <Dialog open={!!swapDialogRecord} onOpenChange={(open) => !open && setSwapDialogRecord(null)}>
                 <DialogContent className="max-w-lg">
                     <DialogHeader>
-                        <DialogTitle>เปลี่ยนเวร</DialogTitle>
+                        <DialogTitle>ขอเปลี่ยนเวร</DialogTitle>
                     </DialogHeader>
                     <div className="space-y-4">
                         <div className="rounded-lg border bg-muted/20 p-3">
@@ -681,13 +910,13 @@ export const DutyManagement = () => {
                             <Textarea
                                 value={swapRequestNote}
                                 onChange={e => setSwapRequestNote(e.target.value)}
-                                placeholder="เช่น ขอเปลี่ยนเวรเนื่องจากติดราชการ / อบรม / ลาป่วย"
+                                placeholder="เช่น ขอเปลี่ยนเวรเนื่องจากติดภารกิจ"
                                 rows={3}
                             />
                         </div>
 
                         <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
-                            หลังส่งคำขอ ผู้รับเปลี่ยนเวรต้องตอบตกลงก่อน ระบบจึงจะอนุญาตให้ส่งอนุมัติตามลำดับ
+                            เมื่อวันที่เข้าเวรพ้นกำหนดแล้ว ระบบจะไม่อนุญาตให้เปลี่ยนเวรกับผู้อื่น
                         </div>
                     </div>
                     <DialogFooter>
@@ -710,9 +939,6 @@ export const DutyManagement = () => {
                             <p className="text-xs text-muted-foreground">
                                 วันที่ {respondDialogRecord ? new Date(respondDialogRecord.duty_date).toLocaleDateString('th-TH') : '-'} • {respondDialogRecord?.duty_shift_label || '-'}
                             </p>
-                            <p className="text-xs text-muted-foreground">
-                                ผู้รับเวรใหม่: {currentUserName}{currentUserPosition ? ` (${currentUserPosition})` : ''}
-                            </p>
                         </div>
 
                         <div>
@@ -723,10 +949,6 @@ export const DutyManagement = () => {
                                 placeholder="กรอกหมายเหตุเพิ่มเติม (ถ้ามี)"
                                 rows={3}
                             />
-                        </div>
-
-                        <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900">
-                            หากตอบตกลง ระบบจะแสดงชื่อคุณเป็น “ผู้ปฏิบัติเวรสุดท้าย” และปลดล็อกการส่งอนุมัติ
                         </div>
                     </div>
                     <DialogFooter className="sm:justify-between gap-2">
