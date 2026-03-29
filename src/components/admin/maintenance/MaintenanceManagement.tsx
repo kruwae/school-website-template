@@ -137,7 +137,10 @@ export const MaintenanceManagement = () => {
         isAdmin ||
         role === 'director' ||
         role === 'deputy_director';
-    const canDeleteRecord = isAdmin || isMaintenanceManagementUser;
+    const canDeleteRecord = (r: MaintenanceRequest) => {
+        if (!currentUser) return false;
+        return r.reported_by === currentUserName;
+    };
 
     /**
      * canModify rules:
@@ -374,11 +377,12 @@ export const MaintenanceManagement = () => {
         }
     };
 
-    const handleDelete = async (id: string) => {
-        if (!canDeleteRecord) {
-            toast({ title: 'ไม่มีสิทธิ์ลบรายการนี้', variant: 'destructive' });
+    const handleDelete = async (record: MaintenanceRequest) => {
+        if (!canDeleteRecord(record)) {
+            toast({ title: 'เฉพาะผู้แจ้งเท่านั้นที่สามารถลบรายการได้', variant: 'destructive' });
             return;
         }
+        const id = record.id;
         if (!confirm('ต้องการลบรายการนี้?')) return;
         await (supabase.from('maintenance_requests' as any) as any).delete().eq('id', id);
         toast({ title: 'ลบสำเร็จ' });
@@ -533,8 +537,8 @@ export const MaintenanceManagement = () => {
                                             <Button variant="ghost" size="icon" className="h-7 w-7" title="แก้ไข" onClick={() => openEdit(r)}>
                                                 <Edit2 className="w-3.5 h-3.5" />
                                             </Button>
-                                            {canDeleteRecord && (
-                                                <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" title="ลบ" onClick={() => handleDelete(r.id)}>
+                                            {canDeleteRecord(r) && (
+                                                <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" title="ลบ" onClick={() => handleDelete(r)}>
                                                     <Trash2 className="w-3.5 h-3.5" />
                                                 </Button>
                                             )}
