@@ -569,14 +569,23 @@ export const DutyManagement = () => {
         fetchAll();
     };
 
-    const canRequestSwap = (assignment: DutyAssignment, record?: DutyRecord) => {
-        if (isPastDutyDate(assignment.duty_date)) return false;
-        if (!record) return false;
-        if (record.status === 'verified' || record.status === 'approved') return false;
-        const belongsToMe = assignment.assigned_user_id
+    const belongsToCurrentUser = (assignment: DutyAssignment) => {
+        return assignment.assigned_user_id
             ? assignment.assigned_user_id === currentUserId
             : assignment.assigned_name === currentUserName;
-        if (!belongsToMe && !isScheduleManager) return false;
+    };
+
+    const canConfirmNoSwap = (assignment: DutyAssignment, record?: DutyRecord) => {
+        if (isPastDutyDate(assignment.duty_date)) return false;
+        if (!belongsToCurrentUser(assignment)) return false;
+        return !record;
+    };
+
+    const canRequestSwap = (assignment: DutyAssignment, record?: DutyRecord) => {
+        if (isPastDutyDate(assignment.duty_date)) return false;
+        if (!belongsToCurrentUser(assignment)) return false;
+        if (!record) return true;
+        if (record.status === 'approved' || record.status === 'recorded') return false;
         return !record.swap_requested || record.swap_response_status === 'rejected';
     };
 
@@ -590,9 +599,74 @@ export const DutyManagement = () => {
 
     const canSubmitForApproval = (record: DutyRecord, assignment?: DutyAssignment) => {
         if (!assignment || isPastDutyDate(assignment.duty_date)) return false;
+        if (!belongsToCurrentUser(assignment)) return false;
+        if (record.swap_requested && record.swap_requested_by_user_id && record.swap_requested_by_user_id !== currentUserId) return false;
         if (record.status !== 'verified') return false;
         if (record.swap_requested && record.swap_response_status !== 'accepted') return false;
         return !!record.approval_ready;
+    };
+
+    const handleConfirmNoSwap = async (assignment: DutyAssignment) => {
+        if (isPastDutyDate(assignment.duty_date)) {
+            toast({ title: 'วันที่เข้าเวรพ้นกำหนดแล้ว', variant: 'destructive' });
+            return;
+        }
+
+        try {
+            const existingRecord = recordByAssignmentId.get(assignment.id);
+            if (existingRecord) {
+                const { error } = await (supabase.from('duty_records' as any) as any)
+                    .update({
+                        swap_requested: false,
+                        swap_requested_at: null,
+                        swap_requested_by_user_id: currentUserId || null,
+                        swap_requested_by_name: currentUserName || assignment.assigned_name,
+                        swap_requested_by_position: currentUserPosition || assignment.assigned_position || '',
+                        swap_target_user_id: null,
+                        swap_target_name: null,
+                        swap_target_position: null,
+                        swap_response_status: 'not_required',
+                        swap_responded_at: null,
+                        swap_responded_by_user_id: null,
+                        swap_response_note: null,
+                        final_duty_user_id: currentUserId || assignment.assigned_user_id || null,
+                        final_duty_name: currentUserName || assignment.assigned_name,
+                        final_duty_position: currentUserPosition || assignment.assigned_position || '',
+                        approval_ready: true,
+                        status: 'verified',
+                    })
+                    .eq('id', existingRecord.id);
+
+                if (error) throw error;
+            } else {
+                const payload = {
+                    ...buildRecordFormFromAssignment(assignment, currentUser),
+                    swap_requested: false,
+                    swap_requested_at: new Date().toISOString(),
+                    swap_requested_by_user_id: currentUserId || null,
+                    swap_requested_by_name: currentUserName || assignment.assigned_name,
+                    swap_requested_by_position: currentUserPosition || assignment.assigned_position || '',
+                    swap_response_status: 'not_required',
+                    final_duty_user_id: currentUserId || assignment.assigned_user_id || null,
+                    final_duty_name: currentUserName || assignment.assigned_name,
+                    final_duty_position: currentUserPosition || assignment.assigned_position || '',
+                    approval_ready: true,
+                    status: 'verified',
+                };
+
+                const { error } = await (supabase.from('duty_records' as any) as any).insert([payload]);
+                if (error) throw error;
+            }
+
+            await (supabase.from('duty_assignments' as any) as any)
+                .update({ status: 'completed', updated_at: new Date().toISOString() })
+                .eq('id', assignment.id);
+
+            toast({ title: 'ยืนยันเวรนี้แล้ว', description: 'ไม่มีการแลกเวร และสามารถส่งอนุมัติได้' });
+            fetchAll();
+        } catch (error: any) {
+            toast({ title: 'ยืนยันเวรไม่สำเร็จ', description: error?.message || 'เกิดข้อผิดพลาด', variant: 'destructive' });
+        }
     };
 
     const openSwapDialog = async (assignment: DutyAssignment) => {
@@ -780,12 +854,12 @@ export const DutyManagement = () => {
                                 </>
                             )}
 
-                            {!record && (
+                            {canConfirmNoSwap(assignment, record) && (
                                 <Button
                                     variant="default"
                                     size="sm"
                                     className="gap-2"
-                                    onClick={() => openSwapDialog(assignment)}
+                                    onClick={() => handleConfirmNoSwap(assignment)}
                                     disabled={dutyExpired}
                                 >
                                     <CheckCheck className="w-4 h-4" />
@@ -793,7 +867,7 @@ export const DutyManagement = () => {
                                 </Button>
                             )}
 
-                            {(!record || canRequestSwap(assignment, record)) && (
+                            {canRequestSwap(assignment, record) && (
                                 <Button
                                     variant="outline"
                                     size="sm"
@@ -859,7 +933,9 @@ export const DutyManagement = () => {
                                 <p className="text-sm font-medium text-emerald-900">{record.final_duty_name || record.recorder_name}</p>
                                 <p className="text-xs text-emerald-700">{record.final_duty_position || record.recorder_position || '-'}</p>
                                 <p className="text-xs text-emerald-700 mt-2">
-                                    {record.approval_ready ? 'พร้อมส่งอนุมัติ' : 'ยังส่งอนุมัติไม่ได้จนกว่าผู้รับเวรจะตอบตกลง'}
+                                    {record.swap_requested
+                                        ? 'กรณีแลกเวร ต้องให้ผู้รับเวรตอบตกลงก่อน และผู้ขอแลกเวรจะเป็นผู้ส่งอนุมัติ'
+                                        : 'กรณีตกลงไม่มีการแลกเวร เจ้าของเวรจะเป็นผู้ส่งอนุมัติ'}
                                 </p>
                             </div>
                         </div>
@@ -867,7 +943,7 @@ export const DutyManagement = () => {
 
                     {forMine && !record && !dutyExpired && (
                         <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900">
-                            เวรนี้เป็นของคุณ เริ่มจากกด “ตกลง” หรือ “แลกเวร” ก่อน เมื่ออนุมัติแล้วจึงจะมีปุ่ม “บันทึกเวร”
+                            เวรนี้เป็นของคุณ ปุ่ม “ตกลง” คือยืนยันว่าไม่มีการแลกเวร ส่วน “แลกเวร” คือส่งคำขอแลกเวรโดยเลือกผู้มารับเวรแทน
                         </div>
                     )}
 
