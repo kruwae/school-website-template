@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Plus, CalendarCheck, Trash2, Edit2, RefreshCcw, CheckCheck, Send, UserPlus, ClipboardPen, Upload, Image as ImageIcon, X, Loader2 } from 'lucide-react';
+import { Plus, CalendarCheck, Trash2, Edit2, RefreshCcw, CheckCheck, Send, UserPlus, ClipboardPen, Upload, Image as ImageIcon, X, Loader2, FileText, Download, Users, ShieldCheck } from 'lucide-react';
 import {
     Select, SelectContent, SelectItem, SelectTrigger, SelectValue
 } from '@/components/ui/select';
@@ -102,11 +102,11 @@ const SWAP_STATUS_MAP: Record<string, string> = {
 };
 
 const APPROVAL_STEP_LABELS = [
-    '1) ผู้เข้าเวรยืนยัน/ขอเปลี่ยนเวร',
-    '2) ผู้รับเปลี่ยนเวรตอบตกลง',
-    '3) แสดงผู้ปฏิบัติเวรสุดท้าย',
-    '4) ส่งอนุมัติตามลำดับ',
-    '5) อนุมัติแล้วจึงบันทึกเวร',
+    'ยืนยันหรือขอเปลี่ยนเวร',
+    'ผู้รับเวรตอบตกลง',
+    'สรุปผู้ปฏิบัติเวรสุดท้าย',
+    'ส่งอนุมัติ',
+    'บันทึกเวร',
 ];
 
 const startOfToday = () => {
@@ -194,6 +194,7 @@ export const DutyManagement = () => {
     const isScheduleManager =
         ['admin', 'director', 'deputy_director'].includes(role || '') ||
         isHeadManagerPosition(currentUserPositionText);
+    const canManageReports = ['admin', 'dept_head'].includes(role || '');
 
     const [activeTab, setActiveTab] = useState('assignments');
     const [loading, setLoading] = useState(true);
@@ -213,6 +214,7 @@ export const DutyManagement = () => {
     const [swapRequestNote, setSwapRequestNote] = useState('');
     const [respondDialogRecord, setRespondDialogRecord] = useState<DutyRecord | null>(null);
     const [swapResponseNote, setSwapResponseNote] = useState('');
+    const [reportMonth, setReportMonth] = useState(new Date().toISOString().slice(0, 7));
 
     useEffect(() => {
         fetchAll();
@@ -857,6 +859,82 @@ export const DutyManagement = () => {
         ];
     };
 
+    const exportMonthlyReportPdf = () => {
+        if (!canManageReports) {
+            toast({ title: 'ไม่มีสิทธิ์ส่งออกรายงาน', description: 'เฉพาะหัวหน้าฝ่ายและแอดมิน', variant: 'destructive' });
+            return;
+        }
+
+        const reportRecords = records.filter(item => item.duty_date.startsWith(reportMonth));
+        const reportTitle = `รายงานบันทึกเวร ประจำเดือน ${reportMonth}`;
+        const printableWindow = window.open('', '_blank', 'width=1200,height=900');
+
+        if (!printableWindow) {
+            toast({ title: 'ไม่สามารถเปิดหน้าพิมพ์ได้', variant: 'destructive' });
+            return;
+        }
+
+        const rows = reportRecords.map((record, index) => `
+            <tr>
+                <td>${index + 1}</td>
+                <td>${new Date(record.duty_date).toLocaleDateString('th-TH')}</td>
+                <td>${record.duty_shift_label}</td>
+                <td>${record.swap_requested_by_name || '-'}</td>
+                <td>${record.swap_target_name || '-'}</td>
+                <td>${record.final_duty_name || record.recorder_name || '-'}</td>
+                <td>${STATUS_MAP[record.status] || record.status}</td>
+                <td>${record.incidents || '-'}</td>
+            </tr>
+        `).join('');
+
+        printableWindow.document.write(`
+            <html>
+                <head>
+                    <title>${reportTitle}</title>
+                    <style>
+                        body { font-family: Tahoma, sans-serif; padding: 32px; color: #111827; }
+                        h1 { font-size: 24px; margin-bottom: 8px; }
+                        p { margin: 0 0 16px; color: #4b5563; }
+                        table { width: 100%; border-collapse: collapse; margin-top: 16px; }
+                        th, td { border: 1px solid #d1d5db; padding: 8px; font-size: 12px; vertical-align: top; }
+                        th { background: #f3f4f6; text-align: left; }
+                        .meta { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin: 16px 0; }
+                        .box { border: 1px solid #e5e7eb; border-radius: 10px; padding: 12px; background: #fafafa; }
+                    </style>
+                </head>
+                <body>
+                    <h1>${reportTitle}</h1>
+                    <p>สรุปรายการบันทึกเวรและการเปลี่ยนเวรสำหรับส่งออกเป็น PDF</p>
+                    <div class="meta">
+                        <div class="box"><strong>เดือนรายงาน</strong><br/>${reportMonth}</div>
+                        <div class="box"><strong>จำนวนรายการ</strong><br/>${reportRecords.length} รายการ</div>
+                        <div class="box"><strong>ผู้ส่งออก</strong><br/>${currentUserName || '-'}</div>
+                    </div>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>#</th>
+                                <th>วันที่</th>
+                                <th>ช่วงเวร</th>
+                                <th>ผู้ขอเปลี่ยนเวร</th>
+                                <th>ผู้รับเปลี่ยนเวร</th>
+                                <th>ผู้ปฏิบัติเวรสุดท้าย</th>
+                                <th>สถานะ</th>
+                                <th>เหตุการณ์</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${rows || '<tr><td colspan="8">ไม่พบข้อมูลในเดือนที่เลือก</td></tr>'}
+                        </tbody>
+                    </table>
+                </body>
+            </html>
+        `);
+        printableWindow.document.close();
+        printableWindow.focus();
+        printableWindow.print();
+    };
+
     const renderAssignmentCard = (assignment: DutyAssignment, forMine = false) => {
         const record = recordByAssignmentId.get(assignment.id);
         const dutyExpired = isPastDutyDate(assignment.duty_date);
@@ -967,49 +1045,56 @@ export const DutyManagement = () => {
                     </div>
 
                     {record && (
-                        <div className="space-y-4">
-                            <div className="rounded-lg border border-primary/20 bg-primary/5 p-3">
-                                <p className="text-xs font-semibold text-primary uppercase tracking-wide mb-3">ลำดับการเปลี่ยนเวรและการอนุมัติ</p>
-                                <div className="grid gap-2">
-                                    {approvalFlow.map((step, index) => (
-                                        <div
-                                            key={step.label}
-                                            className={`flex items-center gap-3 rounded-lg border px-3 py-2 text-sm ${
-                                                step.done
-                                                    ? 'border-emerald-200 bg-emerald-50 text-emerald-900'
-                                                    : step.active
-                                                        ? 'border-amber-200 bg-amber-50 text-amber-900'
-                                                        : 'border-border bg-background text-muted-foreground'
-                                            }`}
-                                        >
-                                            <div className={`flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold ${
-                                                step.done
-                                                    ? 'bg-emerald-600 text-white'
-                                                    : step.active
-                                                        ? 'bg-amber-500 text-white'
-                                                        : 'bg-muted text-muted-foreground'
-                                            }`}>
-                                                {index + 1}
+                        <div className="space-y-3">
+                            <div className="grid gap-3 xl:grid-cols-[1.4fr_1fr]">
+                                <div className="rounded-xl border bg-background p-3">
+                                    <div className="flex items-center justify-between gap-3 mb-3">
+                                        <p className="text-sm font-semibold">สถานะการดำเนินงาน</p>
+                                        <Badge variant="outline">{STATUS_MAP[record.status] || record.status}</Badge>
+                                    </div>
+                                    <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
+                                        {approvalFlow.map((step, index) => (
+                                            <div
+                                                key={step.label}
+                                                className={`rounded-lg border p-2 text-xs ${
+                                                    step.done
+                                                        ? 'border-emerald-200 bg-emerald-50 text-emerald-900'
+                                                        : step.active
+                                                            ? 'border-amber-200 bg-amber-50 text-amber-900'
+                                                            : 'border-border bg-muted/20 text-muted-foreground'
+                                                }`}
+                                            >
+                                                <div className="mb-1 font-semibold">ขั้นตอน {index + 1}</div>
+                                                <div>{step.label}</div>
                                             </div>
-                                            <span>{step.label}</span>
-                                        </div>
-                                    ))}
+                                        ))}
+                                    </div>
                                 </div>
 
-                                <div className="mt-3 grid gap-2 text-sm">
-                                    <div className="rounded-md bg-white/80 px-3 py-2 border">
-                                        <span className="text-muted-foreground">ผู้ขอเปลี่ยนเวร: </span>
-                                        <span className="font-medium text-foreground">{record.swap_requested_by_name || assignment.assigned_name || '-'}</span>
-                                    </div>
-                                    <div className="rounded-md bg-white/80 px-3 py-2 border">
-                                        <span className="text-muted-foreground">ผู้รับเปลี่ยนเวร: </span>
-                                        <span className="font-medium text-foreground">{record.swap_target_name || '-'}</span>
-                                        {record.swap_target_position ? <span className="text-muted-foreground"> ({record.swap_target_position})</span> : null}
-                                    </div>
-                                    <div className="rounded-md bg-white/80 px-3 py-2 border">
-                                        <span className="text-muted-foreground">ผู้ปฏิบัติเวรสุดท้าย: </span>
-                                        <span className="font-medium text-foreground">{record.final_duty_name || '-'}</span>
-                                        {record.final_duty_position ? <span className="text-muted-foreground"> ({record.final_duty_position})</span> : null}
+                                <div className="rounded-xl border bg-muted/20 p-3">
+                                    <p className="text-sm font-semibold mb-3">สรุปการเปลี่ยนเวร</p>
+                                    <div className="space-y-2 text-sm">
+                                        <div className="flex items-start gap-2">
+                                            <Users className="w-4 h-4 mt-0.5 text-muted-foreground" />
+                                            <div>
+                                                <p className="text-xs text-muted-foreground">ผู้ขอเปลี่ยนเวร</p>
+                                                <p className="font-medium">{record.swap_requested_by_name || assignment.assigned_name || '-'}</p>
+                                            </div>
+                                        </div>
+                                        <div className="flex items-start gap-2">
+                                            <RefreshCcw className="w-4 h-4 mt-0.5 text-muted-foreground" />
+                                            <div>
+                                                <p className="text-xs text-muted-foreground">ผู้รับเปลี่ยนเวร</p>
+                                                <p className="font-medium">{record.swap_target_name || '-'}</p>
+                                            </div>
+                                        </div>
+                                        <div className="flex items-start gap-2">
+                                            <ShieldCheck className="w-4 h-4 mt-0.5 text-muted-foreground" />
+                                            <div>
+                                                <p className="text-xs text-muted-foreground">ผู้ปฏิบัติเวรสุดท้าย</p>
+                                                <p className="font-medium">{record.final_duty_name || '-'}</p>
+                                            </div>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -1062,24 +1147,56 @@ export const DutyManagement = () => {
 
     return (
         <div className="p-6 space-y-6">
-            <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-                <div>
-                    <h1 className="text-2xl font-bold flex items-center gap-2">
-                        <CalendarCheck className="w-6 h-6 text-green-600" /> จัดการเวรประจำวัน
-                    </h1>
-                    <p className="text-muted-foreground text-sm">
-                        แยกการทำงานเป็น 2 ส่วน: กำหนดเข้าเวรล่วงหน้า และบันทึกเวรตามวันที่ที่ถูกกำหนด
-                    </p>
+            <div className="rounded-2xl border bg-gradient-to-r from-background to-muted/30 p-5">
+                <div className="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-4">
+                    <div>
+                        <h1 className="text-2xl font-bold flex items-center gap-2">
+                            <CalendarCheck className="w-6 h-6 text-green-600" /> จัดการเวรประจำวัน
+                        </h1>
+                        <p className="text-muted-foreground text-sm mt-1">
+                            มุมมองใหม่แบบกระชับ เน้นสถานะสำคัญ ปุ่มชัด และลดข้อความยาวที่ไม่จำเป็น
+                        </p>
+                    </div>
+
+                    <div className="flex flex-wrap gap-3 items-center">
+                        <Input type="month" value={filterMonth} onChange={e => setFilterMonth(e.target.value)} className="w-44" />
+                        {canManageReports && (
+                            <>
+                                <Input type="month" value={reportMonth} onChange={e => setReportMonth(e.target.value)} className="w-44" />
+                                <Button variant="outline" className="gap-2" onClick={exportMonthlyReportPdf}>
+                                    <Download className="w-4 h-4" />
+                                    ส่งออก PDF
+                                </Button>
+                            </>
+                        )}
+                        {canSelfSchedule && (
+                            <Button onClick={handleOpenAssignmentDialog} className="gap-2">
+                                <UserPlus className="w-4 h-4" />
+                                กำหนดเข้าเวร
+                            </Button>
+                        )}
+                    </div>
                 </div>
-                <div className="flex gap-3 items-center">
-                    <Input type="month" value={filterMonth} onChange={e => setFilterMonth(e.target.value)} className="w-44" />
-                    {canSelfSchedule && (
-                        <Button onClick={handleOpenAssignmentDialog} className="gap-2">
-                            <UserPlus className="w-4 h-4" />
-                            กำหนดเข้าเวร
-                        </Button>
-                    )}
-                </div>
+
+                {canManageReports && (
+                    <div className="mt-4 grid gap-3 md:grid-cols-3">
+                        <div className="rounded-xl border bg-background p-4">
+                            <div className="flex items-center gap-2 text-sm font-medium">
+                                <FileText className="w-4 h-4 text-primary" />
+                                รายงานประจำเดือน
+                            </div>
+                            <p className="text-xs text-muted-foreground mt-1">สร้างสรุปบันทึกเวรและรายการเปลี่ยนเวรตามเดือนที่เลือก</p>
+                        </div>
+                        <div className="rounded-xl border bg-background p-4">
+                            <div className="text-sm font-medium">สิทธิ์การใช้งาน</div>
+                            <p className="text-xs text-muted-foreground mt-1">เฉพาะหัวหน้าฝ่ายและแอดมินเท่านั้น</p>
+                        </div>
+                        <div className="rounded-xl border bg-background p-4">
+                            <div className="text-sm font-medium">รูปแบบส่งออก</div>
+                            <p className="text-xs text-muted-foreground mt-1">เปิดหน้าพิมพ์เพื่อบันทึกเป็น PDF ได้ทันที</p>
+                        </div>
+                    </div>
+                )}
             </div>
 
             <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
