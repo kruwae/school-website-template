@@ -101,6 +101,14 @@ const SWAP_STATUS_MAP: Record<string, string> = {
     rejected: 'ปฏิเสธการรับเวร',
 };
 
+const APPROVAL_STEP_LABELS = [
+    '1) ผู้เข้าเวรยืนยัน/ขอเปลี่ยนเวร',
+    '2) ผู้รับเปลี่ยนเวรตอบตกลง',
+    '3) แสดงผู้ปฏิบัติเวรสุดท้าย',
+    '4) ส่งอนุมัติตามลำดับ',
+    '5) อนุมัติแล้วจึงบันทึกเวร',
+];
+
 const startOfToday = () => {
     const d = new Date();
     d.setHours(0, 0, 0, 0);
@@ -812,9 +820,47 @@ export const DutyManagement = () => {
         fetchAll();
     };
 
+    const getApprovalFlowState = (assignment: DutyAssignment, record?: DutyRecord) => {
+        const isOwner = belongsToCurrentUser(assignment);
+        const isSwapTarget = !!record?.swap_target_user_id && record.swap_target_user_id === currentUserId;
+        const hasAcceptedSwap = record?.swap_requested && record?.swap_response_status === 'accepted';
+        const finalDutyResolved = !!record?.final_duty_name;
+        const submittedForApproval = record?.status === 'approved' || record?.status === 'recorded';
+        const canRecordNow = !!record && canOpenRecordDialog(assignment, record);
+
+        return [
+            {
+                label: APPROVAL_STEP_LABELS[0],
+                done: !!record && (!record.swap_requested || record.swap_response_status === 'not_required' || record.swap_response_status === 'pending' || record.swap_response_status === 'accepted' || record.swap_response_status === 'rejected'),
+                active: isOwner && !record,
+            },
+            {
+                label: APPROVAL_STEP_LABELS[1],
+                done: !record?.swap_requested || hasAcceptedSwap,
+                active: !!record?.swap_requested && record?.swap_response_status === 'pending' && isSwapTarget,
+            },
+            {
+                label: APPROVAL_STEP_LABELS[2],
+                done: finalDutyResolved,
+                active: !!record && !finalDutyResolved,
+            },
+            {
+                label: APPROVAL_STEP_LABELS[3],
+                done: submittedForApproval,
+                active: !!record && !submittedForApproval && canSubmitForApproval(record, assignment),
+            },
+            {
+                label: APPROVAL_STEP_LABELS[4],
+                done: canRecordNow || record?.status === 'recorded',
+                active: submittedForApproval && !canRecordNow && record?.status !== 'recorded',
+            },
+        ];
+    };
+
     const renderAssignmentCard = (assignment: DutyAssignment, forMine = false) => {
         const record = recordByAssignmentId.get(assignment.id);
         const dutyExpired = isPastDutyDate(assignment.duty_date);
+        const approvalFlow = getApprovalFlowState(assignment, record);
 
         return (
             <Card key={assignment.id} className="border">
@@ -921,31 +967,79 @@ export const DutyManagement = () => {
                     </div>
 
                     {record && (
-                        <div className="grid md:grid-cols-2 gap-4">
-                            <div className="rounded-lg border bg-muted/20 p-3">
-                                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">สถานะบันทึกเวร</p>
-                                <div className="flex flex-wrap gap-2 mb-2">
-                                    <Badge variant="outline">{STATUS_MAP[record.status] || record.status}</Badge>
-                                    <Badge variant={record.swap_response_status === 'accepted' ? 'default' : 'outline'}>
-                                        {SWAP_STATUS_MAP[record.swap_response_status || 'not_required'] || record.swap_response_status}
-                                    </Badge>
+                        <div className="space-y-4">
+                            <div className="rounded-lg border border-primary/20 bg-primary/5 p-3">
+                                <p className="text-xs font-semibold text-primary uppercase tracking-wide mb-3">ลำดับการเปลี่ยนเวรและการอนุมัติ</p>
+                                <div className="grid gap-2">
+                                    {approvalFlow.map((step, index) => (
+                                        <div
+                                            key={step.label}
+                                            className={`flex items-center gap-3 rounded-lg border px-3 py-2 text-sm ${
+                                                step.done
+                                                    ? 'border-emerald-200 bg-emerald-50 text-emerald-900'
+                                                    : step.active
+                                                        ? 'border-amber-200 bg-amber-50 text-amber-900'
+                                                        : 'border-border bg-background text-muted-foreground'
+                                            }`}
+                                        >
+                                            <div className={`flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold ${
+                                                step.done
+                                                    ? 'bg-emerald-600 text-white'
+                                                    : step.active
+                                                        ? 'bg-amber-500 text-white'
+                                                        : 'bg-muted text-muted-foreground'
+                                            }`}>
+                                                {index + 1}
+                                            </div>
+                                            <span>{step.label}</span>
+                                        </div>
+                                    ))}
                                 </div>
-                                <p className="text-sm text-muted-foreground">เหตุการณ์: <span className="text-foreground">{record.incidents || '-'}</span></p>
-                                {!!record.duty_images?.length && (
-                                    <p className="text-sm text-muted-foreground mt-2">แนบรูปภาพแล้ว {record.duty_images.length} รูป</p>
-                                )}
+
+                                <div className="mt-3 grid gap-2 text-sm">
+                                    <div className="rounded-md bg-white/80 px-3 py-2 border">
+                                        <span className="text-muted-foreground">ผู้ขอเปลี่ยนเวร: </span>
+                                        <span className="font-medium text-foreground">{record.swap_requested_by_name || assignment.assigned_name || '-'}</span>
+                                    </div>
+                                    <div className="rounded-md bg-white/80 px-3 py-2 border">
+                                        <span className="text-muted-foreground">ผู้รับเปลี่ยนเวร: </span>
+                                        <span className="font-medium text-foreground">{record.swap_target_name || '-'}</span>
+                                        {record.swap_target_position ? <span className="text-muted-foreground"> ({record.swap_target_position})</span> : null}
+                                    </div>
+                                    <div className="rounded-md bg-white/80 px-3 py-2 border">
+                                        <span className="text-muted-foreground">ผู้ปฏิบัติเวรสุดท้าย: </span>
+                                        <span className="font-medium text-foreground">{record.final_duty_name || '-'}</span>
+                                        {record.final_duty_position ? <span className="text-muted-foreground"> ({record.final_duty_position})</span> : null}
+                                    </div>
+                                </div>
                             </div>
-                            <div className="rounded-lg border bg-emerald-50 p-3">
-                                <p className="text-xs font-semibold text-emerald-700 uppercase tracking-wide mb-2">ผู้ปฏิบัติเวรสุดท้าย</p>
-                                <p className="text-sm font-medium text-emerald-900">{record.final_duty_name || record.recorder_name}</p>
-                                <p className="text-xs text-emerald-700">{record.final_duty_position || record.recorder_position || '-'}</p>
-                                <p className="text-xs text-emerald-700 mt-2">
-                                    {record.status === 'approved'
-                                        ? 'อนุมัติแล้ว ผู้ปฏิบัติเวรสุดท้ายเท่านั้นที่จะเห็นปุ่มบันทึกเวร'
-                                        : record.swap_requested
-                                            ? 'กรณีแลกเวร ต้องให้ผู้รับเวรตอบตกลงก่อน และผู้ขอแลกเวรจะเป็นผู้ส่งอนุมัติ'
-                                            : 'กรณีตกลงไม่มีการแลกเวร เจ้าของเวรจะเป็นผู้ส่งอนุมัติ'}
-                                </p>
+
+                            <div className="grid md:grid-cols-2 gap-4">
+                                <div className="rounded-lg border bg-muted/20 p-3">
+                                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">สถานะบันทึกเวร</p>
+                                    <div className="flex flex-wrap gap-2 mb-2">
+                                        <Badge variant="outline">{STATUS_MAP[record.status] || record.status}</Badge>
+                                        <Badge variant={record.swap_response_status === 'accepted' ? 'default' : 'outline'}>
+                                            {SWAP_STATUS_MAP[record.swap_response_status || 'not_required'] || record.swap_response_status}
+                                        </Badge>
+                                    </div>
+                                    <p className="text-sm text-muted-foreground">เหตุการณ์: <span className="text-foreground">{record.incidents || '-'}</span></p>
+                                    {!!record.duty_images?.length && (
+                                        <p className="text-sm text-muted-foreground mt-2">แนบรูปภาพแล้ว {record.duty_images.length} รูป</p>
+                                    )}
+                                </div>
+                                <div className="rounded-lg border bg-emerald-50 p-3">
+                                    <p className="text-xs font-semibold text-emerald-700 uppercase tracking-wide mb-2">ผู้ปฏิบัติเวรสุดท้าย</p>
+                                    <p className="text-sm font-medium text-emerald-900">{record.final_duty_name || record.recorder_name}</p>
+                                    <p className="text-xs text-emerald-700">{record.final_duty_position || record.recorder_position || '-'}</p>
+                                    <p className="text-xs text-emerald-700 mt-2">
+                                        {record.status === 'approved'
+                                            ? 'อนุมัติแล้ว ผู้ปฏิบัติเวรสุดท้ายเท่านั้นที่จะเห็นปุ่มบันทึกเวร'
+                                            : record.swap_requested
+                                                ? 'กรณีแลกเวร ต้องให้ผู้รับเวรตอบตกลงก่อน ระบบจะแสดงผู้รับเวรและผู้ปฏิบัติเวรสุดท้ายให้ชัดเจน แล้วจึงส่งอนุมัติตามลำดับ'
+                                                : 'กรณีตกลงไม่มีการแลกเวร เจ้าของเวรจะเป็นผู้ส่งอนุมัติ'}
+                                    </p>
+                                </div>
                             </div>
                         </div>
                     )}
@@ -1337,6 +1431,9 @@ export const DutyManagement = () => {
                             />
                         </div>
 
+                        <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+                            ผู้รับเปลี่ยนเวรต้องกด “ตอบตกลงรับเวร” ก่อน ระบบจึงจะแสดงผู้ปฏิบัติเวรสุดท้ายอย่างชัดเจน และเปิดให้ผู้ขอเปลี่ยนเวรส่งอนุมัติตามลำดับ
+                        </div>
                         <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
                             เมื่อวันที่เข้าเวรพ้นกำหนดแล้ว ระบบจะไม่อนุญาตให้เปลี่ยนเวรกับผู้อื่น
                         </div>
