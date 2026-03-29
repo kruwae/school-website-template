@@ -408,9 +408,12 @@ export const DutyManagement = () => {
                 </Button>
             </div>
 
-            <div className="flex gap-3 mb-4">
+            <div className="flex flex-col md:flex-row md:items-center gap-3 mb-4">
                 <Input type="month" value={filterMonth} onChange={e => setFilterMonth(e.target.value)} className="w-40" />
                 <span className="text-sm text-muted-foreground self-center">{filtered.length} รายการ</span>
+                <div className="md:ml-auto rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                    ปุ่ม <span className="font-semibold">เปลี่ยนเวร</span> จะแสดงในแต่ละรายการบันทึกเวรที่ยังไม่ถูกอนุมัติ และผู้มีสิทธิ์แก้ไขรายการนั้นสามารถกดได้
+                </div>
             </div>
 
             <Card>
@@ -418,9 +421,12 @@ export const DutyManagement = () => {
                     {loading ? (
                         <div className="p-12 text-center text-muted-foreground">กำลังโหลด...</div>
                     ) : filtered.length === 0 ? (
-                        <div className="p-12 text-center">
-                            <CalendarCheck className="w-12 h-12 mx-auto mb-3 text-muted-foreground/40" />
+                        <div className="p-12 text-center space-y-3">
+                            <CalendarCheck className="w-12 h-12 mx-auto text-muted-foreground/40" />
                             <p className="text-muted-foreground">ยังไม่มีบันทึกเวร</p>
+                            <p className="text-xs text-muted-foreground">
+                                เมื่อสร้างบันทึกเวรแล้ว ระบบจะแสดงปุ่ม <span className="font-semibold text-foreground">เปลี่ยนเวร</span> ในรายการที่ยังไม่ถูกตรวจสอบหรืออนุมัติ
+                            </p>
                         </div>
                     ) : (
                         <div className="space-y-4 p-4">
@@ -455,7 +461,8 @@ export const DutyManagement = () => {
                                                     </div>
                                                 </div>
 
-                                                <div className="flex flex-wrap gap-2">
+                                                <div className="flex flex-wrap gap-2 items-center">
+                                                    <span className="text-xs font-medium text-muted-foreground">การดำเนินการ:</span>
                                                     {canRequestSwap(r) && (
                                                         <Button variant="outline" size="sm" className="gap-2" onClick={() => openSwapDialog(r)}>
                                                             <RefreshCcw className="w-4 h-4" />
