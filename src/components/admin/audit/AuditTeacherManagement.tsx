@@ -158,6 +158,12 @@ export const AuditTeacherManagement = () => {
     const [showPrintDialog, setShowPrintDialog] = useState(false);
     const [printEvaluatee, setPrintEvaluatee] = useState<Evaluatee | null>(null);
 
+    const canViewAllCommitteeScores =
+        currentUser?.role === 'director' || currentUser?.role === 'admin';
+
+    const canViewCommitteeScore = (committeeId: string) =>
+        canViewAllCommitteeScores || isMyCommittee(committeeId);
+
     useEffect(() => { fetchAll(); }, [filterYear]);
 
     const fetchAll = async () => {
@@ -367,7 +373,7 @@ export const AuditTeacherManagement = () => {
                                         </div>
                                     </div>
                                     <div className="flex items-center gap-2">
-                                        {submittedCount > 0 && (
+                                        {submittedCount > 0 && canViewAllCommitteeScores && (
                                             <span className={`text-sm font-semibold ${grade.color}`}>
                                                 {weightedScore.toFixed(1)} — {grade.grade}
                                             </span>
@@ -410,12 +416,19 @@ export const AuditTeacherManagement = () => {
                                                             {canScore && (
                                                                 <Badge className="ml-1 text-xs bg-yellow-200 text-yellow-800 border-0">คุณ</Badge>
                                                             )}
+                                                            {!canScore && submitted && (
+                                                                <Badge variant="secondary" className="ml-1 text-xs">กรอกแล้ว</Badge>
+                                                            )}
                                                         </div>
                                                         <div className="flex items-center gap-2">
-                                                            {submitted && g ? (
-                                                                <span className={`text-sm font-medium ${g.color}`}>
-                                                                    {(avgScore!).toFixed(1)} — {g.grade}
-                                                                </span>
+                                                            {submitted ? (
+                                                                canViewCommitteeScore(c.id) && g ? (
+                                                                    <span className={`text-sm font-medium ${g.color}`}>
+                                                                        {(avgScore!).toFixed(1)} — {g.grade}
+                                                                    </span>
+                                                                ) : (
+                                                                    <span className="text-xs text-green-700">กรอกคะแนนแล้ว</span>
+                                                                )
                                                             ) : (
                                                                 <span className="text-xs text-muted-foreground">ยังไม่กรอก</span>
                                                             )}
@@ -438,18 +451,24 @@ export const AuditTeacherManagement = () => {
                                             <div className="mt-3 p-3 bg-yellow-50 rounded-lg border border-yellow-200">
                                                 <div className="flex items-center justify-between">
                                                     <div>
-                                                        <p className="text-sm font-semibold text-yellow-800">
-                                                            ผลรวมถ่วงน้ำหนัก:{' '}
-                                                            <span className={gradeLabel(weightedScore).color}>
-                                                                {weightedScore.toFixed(2)} คะแนน — {gradeLabel(weightedScore).grade}
-                                                            </span>
-                                                        </p>
+                                                        {canViewAllCommitteeScores ? (
+                                                            <p className="text-sm font-semibold text-yellow-800">
+                                                                ผลรวมถ่วงน้ำหนัก:{' '}
+                                                                <span className={gradeLabel(weightedScore).color}>
+                                                                    {weightedScore.toFixed(2)} คะแนน — {gradeLabel(weightedScore).grade}
+                                                                </span>
+                                                            </p>
+                                                        ) : (
+                                                            <p className="text-sm font-semibold text-yellow-800">
+                                                                สถานะการประเมิน
+                                                            </p>
+                                                        )}
                                                         <p className="text-xs text-yellow-600">
                                                             {submittedCount} จาก {committees.length} กรรมการกรอกแล้ว
                                                         </p>
                                                     </div>
-                                                    {/* ปุ่มพิมพ์ — แสดงเมื่อกรรมการครบทุกคน */}
-                                                    {committees.length > 0 && submittedCount >= committees.length && (
+                                                    {/* ปุ่มพิมพ์ — ให้เฉพาะ ผอ./admin ที่เห็นคะแนนครบทุกกรรมการ */}
+                                                    {canViewAllCommitteeScores && committees.length > 0 && submittedCount >= committees.length && (
                                                         <Button
                                                             size="sm"
                                                             variant="outline"
@@ -722,7 +741,7 @@ export const AuditTeacherManagement = () => {
                         </p>
                     </DialogHeader>
 
-                    {printEvaluatee && (() => {
+                    {printEvaluatee && canViewAllCommitteeScores && (() => {
                         const myEvals = evaluations.filter(e => e.evaluatee_id === printEvaluatee.id && e.is_submitted);
                         const weightedScore = computeWeightedScore(myEvals, committees);
                         const grade = gradeLabel(weightedScore);
@@ -802,29 +821,31 @@ export const AuditTeacherManagement = () => {
 
                     <DialogFooter className="mt-4">
                         <Button variant="outline" onClick={() => setShowPrintDialog(false)}>ปิด</Button>
-                        <Button
-                            className="gap-2"
-                            onClick={() => {
-                                const area = document.getElementById('print-area');
-                                if (!area) return;
-                                const html = `
-                                    <html><head><title>ผลการประเมิน — ${printEvaluatee?.name}</title>
-                                    <style>
-                                        body { font-family: 'Sarabun', sans-serif; font-size: 12px; padding: 20px; }
-                                        h1 { font-size: 16px; margin-bottom: 4px; }
-                                        .score { font-size: 36px; font-weight: bold; text-align: center; }
-                                        table { width: 100%; border-collapse: collapse; margin-top: 8px; }
-                                        th, td { border: 1px solid #ccc; padding: 4px 8px; }
-                                        th { background: #f5f5f5; }
-                                    </style></head>
-                                    <body>${area.innerHTML}</body></html>`;
-                                const win = window.open('', '_blank');
-                                if (win) { win.document.write(html); win.document.close(); win.print(); }
-                            }}
-                        >
-                            <Printer className="w-4 h-4" />
-                            พิมพ์
-                        </Button>
+                        {canViewAllCommitteeScores && (
+                            <Button
+                                className="gap-2"
+                                onClick={() => {
+                                    const area = document.getElementById('print-area');
+                                    if (!area) return;
+                                    const html = `
+                                        <html><head><title>ผลการประเมิน — ${printEvaluatee?.name}</title>
+                                        <style>
+                                            body { font-family: 'Sarabun', sans-serif; font-size: 12px; padding: 20px; }
+                                            h1 { font-size: 16px; margin-bottom: 4px; }
+                                            .score { font-size: 36px; font-weight: bold; text-align: center; }
+                                            table { width: 100%; border-collapse: collapse; margin-top: 8px; }
+                                            th, td { border: 1px solid #ccc; padding: 4px 8px; }
+                                            th { background: #f5f5f5; }
+                                        </style></head>
+                                        <body>${area.innerHTML}</body></html>`;
+                                    const win = window.open('', '_blank');
+                                    if (win) { win.document.write(html); win.document.close(); win.print(); }
+                                }}
+                            >
+                                <Printer className="w-4 h-4" />
+                                พิมพ์
+                            </Button>
+                        )}
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
