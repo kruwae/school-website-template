@@ -83,10 +83,9 @@ const SHIFT_MAP: Record<string, string> = {
 };
 
 const STATUS_MAP: Record<string, string> = {
-    pending: 'รอดำเนินการ',
-    verified: 'ส่งอนุมัติแล้ว',
+    verified: 'ตกลง/แลกเวรแล้ว',
     approved: 'อนุมัติแล้ว',
-    recorded: 'บันทึกแล้ว',
+    recorded: 'บันทึกเวรแล้ว',
 };
 
 const ASSIGNMENT_STATUS_MAP: Record<string, string> = {
@@ -128,7 +127,7 @@ const buildRecordFormFromAssignment = (assignment: DutyAssignment, currentUser: 
     incidents: '',
     actions_taken: '',
     remarks: '',
-    status: 'recorded',
+    status: 'verified',
     swap_requested: false,
     swap_requested_at: null as string | null,
     swap_requested_by_user_id: null as string | null,
@@ -440,7 +439,7 @@ export const DutyManagement = () => {
 
         const draftPayload = {
             ...buildRecordFormFromAssignment(assignment, currentUser),
-            status: 'pending',
+            status: 'verified',
             approval_ready: false,
         };
         const { data, error } = await (supabase.from('duty_records' as any) as any)
@@ -591,7 +590,7 @@ export const DutyManagement = () => {
 
     const canSubmitForApproval = (record: DutyRecord, assignment?: DutyAssignment) => {
         if (!assignment || isPastDutyDate(assignment.duty_date)) return false;
-        if (record.status !== 'pending') return false;
+        if (record.status !== 'verified') return false;
         if (record.swap_requested && record.swap_response_status !== 'accepted') return false;
         return !!record.approval_ready;
     };
