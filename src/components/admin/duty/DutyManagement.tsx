@@ -406,10 +406,17 @@ export const DutyManagement = () => {
         duty_images: existingRecord.duty_images || [],
     });
 
+    const canCurrentUserRecordDuty = (assignment: DutyAssignment, record?: DutyRecord) => {
+        if (!record) return false;
+        if (record.final_duty_user_id) return record.final_duty_user_id === currentUserId;
+        return belongsToCurrentUser(assignment);
+    };
+
     const canOpenRecordDialog = (assignment: DutyAssignment, record?: DutyRecord) => {
         if (isPastDutyDate(assignment.duty_date)) return false;
         if (!record) return false;
-        return record.status === 'approved';
+        if (record.status !== 'approved') return false;
+        return canCurrentUserRecordDuty(assignment, record);
     };
 
     const openRecordDialog = (assignment: DutyAssignment) => {
@@ -933,9 +940,11 @@ export const DutyManagement = () => {
                                 <p className="text-sm font-medium text-emerald-900">{record.final_duty_name || record.recorder_name}</p>
                                 <p className="text-xs text-emerald-700">{record.final_duty_position || record.recorder_position || '-'}</p>
                                 <p className="text-xs text-emerald-700 mt-2">
-                                    {record.swap_requested
-                                        ? 'กรณีแลกเวร ต้องให้ผู้รับเวรตอบตกลงก่อน และผู้ขอแลกเวรจะเป็นผู้ส่งอนุมัติ'
-                                        : 'กรณีตกลงไม่มีการแลกเวร เจ้าของเวรจะเป็นผู้ส่งอนุมัติ'}
+                                    {record.status === 'approved'
+                                        ? 'อนุมัติแล้ว ผู้ปฏิบัติเวรสุดท้ายเท่านั้นที่จะเห็นปุ่มบันทึกเวร'
+                                        : record.swap_requested
+                                            ? 'กรณีแลกเวร ต้องให้ผู้รับเวรตอบตกลงก่อน และผู้ขอแลกเวรจะเป็นผู้ส่งอนุมัติ'
+                                            : 'กรณีตกลงไม่มีการแลกเวร เจ้าของเวรจะเป็นผู้ส่งอนุมัติ'}
                                 </p>
                             </div>
                         </div>
@@ -943,7 +952,7 @@ export const DutyManagement = () => {
 
                     {forMine && !record && !dutyExpired && (
                         <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900">
-                            เวรนี้เป็นของคุณ ปุ่ม “ตกลง” คือยืนยันว่าไม่มีการแลกเวร ส่วน “แลกเวร” คือส่งคำขอแลกเวรโดยเลือกผู้มารับเวรแทน
+                            เวรนี้เป็นของคุณ ปุ่ม “ตกลง” คือยืนยันว่าไม่มีการแลกเวร ส่วน “แลกเวร” คือส่งคำขอแลกเวรโดยเลือกผู้มารับเวรแทน เมื่ออนุมัติแล้ว ผู้ที่ปฏิบัติเวรจริงจะเห็นปุ่ม “บันทึกเวร”
                         </div>
                     )}
 
@@ -1039,7 +1048,7 @@ export const DutyManagement = () => {
                         <CardContent className="p-4 space-y-2">
                             <p className="font-medium">บันทึกเวรตามวันที่ได้รับมอบหมาย</p>
                             <p className="text-sm text-muted-foreground">
-                                หลังจากกำหนดเข้าเวร ให้เลือก “ตกลง” หรือ “แลกเวร” ก่อน เมื่อส่งอนุมัติและอนุมัติแล้ว ปุ่ม “บันทึกเวร” จึงจะแสดง และในขั้นตอนนี้จึงจะอัปโหลดรูปภาพเหตุการณ์ได้
+                                workflow ที่ถูกต้องคือ: กำหนดเข้าเวร → ตกลงหรือแลกเวร → ผู้รับเวรตอบรับ (ถ้ามี) → ผู้ขอส่งอนุมัติ → เมื่ออนุมัติแล้ว ผู้ที่ปฏิบัติเวรจริงจึงเห็นปุ่ม “บันทึกเวร” และอัปโหลดรูปภาพเหตุการณ์ได้
                             </p>
                         </CardContent>
                     </Card>
