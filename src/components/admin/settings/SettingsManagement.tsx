@@ -5,8 +5,9 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
-import { Settings, Save } from 'lucide-react';
+import { Settings, Save, KeyRound } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { getCurrentUser, hashPassword } from '@/lib/auth';
 
 interface Setting {
     key: string;
@@ -19,7 +20,14 @@ export const SettingsManagement = () => {
     const [settings, setSettings] = useState<Record<string, string>>({});
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
+    const [passwordForm, setPasswordForm] = useState({
+        currentPassword: '',
+        newPassword: '',
+        confirmPassword: '',
+    });
+    const [passwordSaving, setPasswordSaving] = useState(false);
     const { toast } = useToast();
+    const currentUser = getCurrentUser();
 
     useEffect(() => {
         fetchSettings();
@@ -93,6 +101,93 @@ export const SettingsManagement = () => {
         }
     };
 
+    const handlePasswordChange = async () => {
+        if (!currentUser?.id) {
+            toast({
+                variant: 'destructive',
+                title: 'ไม่พบข้อมูลผู้ใช้',
+                description: 'กรุณาเข้าสู่ระบบใหม่อีกครั้ง',
+            });
+            return;
+        }
+
+        if (!passwordForm.currentPassword || !passwordForm.newPassword || !passwordForm.confirmPassword) {
+            toast({
+                variant: 'destructive',
+                title: 'กรอกข้อมูลไม่ครบ',
+                description: 'กรุณากรอกรหัสผ่านเดิม รหัสผ่านใหม่ และยืนยันรหัสผ่าน',
+            });
+            return;
+        }
+
+        if (passwordForm.newPassword.length < 6) {
+            toast({
+                variant: 'destructive',
+                title: 'รหัสผ่านใหม่สั้นเกินไป',
+                description: 'กรุณาตั้งรหัสผ่านอย่างน้อย 6 ตัวอักษร',
+            });
+            return;
+        }
+
+        if (passwordForm.newPassword !== passwordForm.confirmPassword) {
+            toast({
+                variant: 'destructive',
+                title: 'ยืนยันรหัสผ่านไม่ตรงกัน',
+                description: 'กรุณาตรวจสอบรหัสผ่านใหม่อีกครั้ง',
+            });
+            return;
+        }
+
+        setPasswordSaving(true);
+        try {
+            const currentPasswordHash = await hashPassword(passwordForm.currentPassword);
+            const { data: existingUser, error: fetchError } = await (supabase.from('app_users' as any) as any)
+                .select('id, password_hash')
+                .eq('id', currentUser.id)
+                .maybeSingle();
+
+            if (fetchError) throw fetchError;
+
+            if (!existingUser || existingUser.password_hash !== currentPasswordHash) {
+                toast({
+                    variant: 'destructive',
+                    title: 'รหัสผ่านเดิมไม่ถูกต้อง',
+                    description: 'ไม่สามารถเปลี่ยนรหัสผ่านได้',
+                });
+                return;
+            }
+
+            const newPasswordHash = await hashPassword(passwordForm.newPassword);
+            const { error: updateError } = await (supabase.from('app_users' as any) as any)
+                .update({
+                    password_hash: newPasswordHash,
+                    updated_at: new Date().toISOString(),
+                })
+                .eq('id', currentUser.id);
+
+            if (updateError) throw updateError;
+
+            setPasswordForm({
+                currentPassword: '',
+                newPassword: '',
+                confirmPassword: '',
+            });
+
+            toast({
+                title: 'เปลี่ยนรหัสผ่านสำเร็จ',
+                description: 'ใช้รหัสผ่านใหม่ในการเข้าสู่ระบบครั้งถัดไป',
+            });
+        } catch (error: any) {
+            toast({
+                variant: 'destructive',
+                title: 'เปลี่ยนรหัสผ่านไม่สำเร็จ',
+                description: error?.message || 'เกิดข้อผิดพลาดระหว่างบันทึกรหัสผ่าน',
+            });
+        } finally {
+            setPasswordSaving(false);
+        }
+    };
+
     if (loading) {
         return (
             <div className="p-8">
@@ -117,6 +212,62 @@ export const SettingsManagement = () => {
             </div>
 
             <div className="space-y-6">
+                <Card>
+                    <CardHeader>
+                        <CardTitle className="flex items-center gap-2">
+                            <KeyRound className="w-5 h-5" />
+                            เปลี่ยนรหัสผ่าน
+                        </CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div className="space-y-2 md:col-span-2">
+                                <Label htmlFor="current_password">รหัสผ่านปัจจุบัน</Label>
+                                <Input
+                                    id="current_password"
+                                    type="password"
+                                    value={passwordForm.currentPassword}
+                                    onChange={(e) => setPasswordForm((prev) => ({ ...prev, currentPassword: e.target.value }))}
+                                    placeholder="กรอกรหัสผ่านเดิม"
+                                />
+                            </div>
+                            <div className="space-y-2">
+                                <Label htmlFor="new_password">รหัสผ่านใหม่</Label>
+                                <Input
+                                    id="new_password"
+                                    type="password"
+                                    value={passwordForm.newPassword}
+                                    onChange={(e) => setPasswordForm((prev) => ({ ...prev, newPassword: e.target.value }))}
+                                    placeholder="อย่างน้อย 6 ตัวอักษร"
+                                />
+                            </div>
+                            <div className="space-y-2">
+                                <Label htmlFor="confirm_password">ยืนยันรหัสผ่านใหม่</Label>
+                                <Input
+                                    id="confirm_password"
+                                    type="password"
+                                    value={passwordForm.confirmPassword}
+                                    onChange={(e) => setPasswordForm((prev) => ({ ...prev, confirmPassword: e.target.value }))}
+                                    placeholder="พิมพ์รหัสผ่านใหม่อีกครั้ง"
+                                />
+                            </div>
+                        </div>
+
+                        <div className="flex items-center justify-between gap-3 border rounded-lg px-4 py-3 bg-muted/20">
+                            <div>
+                                <p className="text-sm font-medium">บัญชีปัจจุบัน</p>
+                                <p className="text-xs text-muted-foreground">
+                                    {currentUser?.full_name || '-'}{currentUser?.username ? ` (@${currentUser.username})` : ''}
+                                </p>
+                            </div>
+                            <Button onClick={handlePasswordChange} disabled={passwordSaving} className="gap-2">
+                                <KeyRound className="w-4 h-4" />
+                                {passwordSaving ? 'กำลังเปลี่ยน...' : 'เปลี่ยนรหัสผ่าน'}
+                            </Button>
+                        </div>
+                    </CardContent>
+                </Card>
+
                 {/* General Settings */}
                 <Card>
                     <CardHeader>

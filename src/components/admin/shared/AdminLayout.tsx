@@ -28,6 +28,7 @@ import { useSchoolSettings } from '@/hooks/useSchoolSettings';
 import { useState } from 'react';
 import { getCurrentUser, logout } from '@/lib/auth';
 import { usePermissions } from '@/hooks/usePermissions';
+import schoolLogo from '@/assets/school-logo.svg';
 
 interface AdminLayoutProps {
     children: ReactNode;
@@ -150,12 +151,12 @@ export const AdminLayout = ({ children }: AdminLayoutProps) => {
             <aside className="fixed left-0 top-0 h-full w-64 bg-card border-r border-border shadow-lg z-40 flex flex-col">
                 <div className="p-4 border-b border-border flex-shrink-0">
                     <Link to="/" className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-full bg-blue-600 flex items-center justify-center flex-shrink-0">
-                            <span className="text-white font-bold text-xs">สศ</span>
+                        <div className="w-10 h-10 rounded-full bg-white shadow-md ring-2 ring-primary/15 flex items-center justify-center flex-shrink-0 overflow-hidden">
+                            <img src={schoolLogo} alt="โลโก้โรงเรียน" className="w-full h-full object-contain" />
                         </div>
                         <div className="min-w-0">
-                            <h1 className="font-bold text-primary text-xs leading-tight truncate">โรงเรียนโสตศึกษา</h1>
-                            <p className="text-xs text-muted-foreground truncate">จ.สงขลา • ระบบจัดการ</p>
+                            <h1 className="font-bold text-primary text-xs leading-tight truncate">โรงเรียนโสตศึกษาจังหวัดสงขลา</h1>
+                            <p className="text-xs text-muted-foreground truncate">ระบบจัดการข้อมูลโรงเรียน</p>
                         </div>
                     </Link>
                 </div>

@@ -6,9 +6,9 @@
 
 @layer base {
   :root {
-    /* School colors - Navy Blue & Gold theme */
-    --background: 210 20% 98%;
-    --foreground: 220 30% 15%;
+    /* School colors - Pink Rose theme */
+    --background: 340 45% 98%;
+    --foreground: 335 35% 18%;
 
     --card: 0 0% 100%;
     --card-foreground: 220 30% 15%;
@@ -16,49 +16,49 @@
     --popover: 0 0% 100%;
     --popover-foreground: 220 30% 15%;
 
-    /* Primary - Navy Blue */
-    --primary: 220 60% 25%;
-    --primary-foreground: 45 100% 96%;
+    /* Primary - Deep Pink */
+    --primary: 338 72% 46%;
+    --primary-foreground: 0 0% 100%;
 
-    /* Secondary - Light Blue */
-    --secondary: 210 40% 94%;
-    --secondary-foreground: 220 60% 25%;
+    /* Secondary - Soft Pink */
+    --secondary: 336 60% 95%;
+    --secondary-foreground: 338 52% 30%;
 
-    /* Accent - Gold */
-    --accent: 45 90% 55%;
-    --accent-foreground: 220 60% 15%;
+    /* Accent - Warm Pink */
+    --accent: 343 88% 67%;
+    --accent-foreground: 0 0% 100%;
 
-    --muted: 210 25% 92%;
-    --muted-foreground: 220 15% 45%;
+    --muted: 336 30% 93%;
+    --muted-foreground: 335 16% 42%;
 
     --destructive: 0 84% 60%;
     --destructive-foreground: 0 0% 100%;
 
-    --border: 220 20% 88%;
-    --input: 220 20% 88%;
-    --ring: 220 60% 25%;
+    --border: 338 26% 86%;
+    --input: 338 26% 86%;
+    --ring: 338 72% 46%;
 
     --radius: 0.5rem;
 
     /* Custom school variables */
-    --gold: 45 90% 55%;
-    --gold-light: 45 85% 70%;
-    --gold-dark: 45 90% 40%;
-    --navy: 220 60% 25%;
-    --navy-light: 220 45% 40%;
-    --navy-dark: 220 70% 15%;
+    --gold: 343 88% 67%;
+    --gold-light: 340 100% 82%;
+    --gold-dark: 338 72% 46%;
+    --navy: 338 72% 46%;
+    --navy-light: 338 58% 58%;
+    --navy-dark: 338 62% 32%;
     
     /* Gradients */
-    --gradient-hero: linear-gradient(135deg, hsl(220 60% 20%) 0%, hsl(220 50% 35%) 100%);
-    --gradient-gold: linear-gradient(135deg, hsl(45 90% 55%) 0%, hsl(45 85% 65%) 100%);
-    --gradient-card: linear-gradient(180deg, hsl(0 0% 100%) 0%, hsl(210 25% 98%) 100%);
+    --gradient-hero: linear-gradient(135deg, hsl(338 72% 40%) 0%, hsl(343 78% 62%) 100%);
+    --gradient-gold: linear-gradient(135deg, hsl(343 88% 67%) 0%, hsl(334 100% 78%) 100%);
+    --gradient-card: linear-gradient(180deg, hsl(0 0% 100%) 0%, hsl(336 45% 97%) 100%);
     
     /* Shadows */
-    --shadow-sm: 0 1px 2px 0 hsl(220 30% 15% / 0.05);
-    --shadow-md: 0 4px 6px -1px hsl(220 30% 15% / 0.08), 0 2px 4px -2px hsl(220 30% 15% / 0.05);
-    --shadow-lg: 0 10px 15px -3px hsl(220 30% 15% / 0.1), 0 4px 6px -4px hsl(220 30% 15% / 0.1);
-    --shadow-xl: 0 20px 25px -5px hsl(220 30% 15% / 0.1), 0 8px 10px -6px hsl(220 30% 15% / 0.1);
-    --shadow-gold: 0 4px 14px 0 hsl(45 90% 55% / 0.3);
+    --shadow-sm: 0 1px 2px 0 hsl(338 35% 20% / 0.05);
+    --shadow-md: 0 4px 6px -1px hsl(338 35% 20% / 0.08), 0 2px 4px -2px hsl(338 35% 20% / 0.05);
+    --shadow-lg: 0 10px 15px -3px hsl(338 35% 20% / 0.1), 0 4px 6px -4px hsl(338 35% 20% / 0.1);
+    --shadow-xl: 0 20px 25px -5px hsl(338 35% 20% / 0.1), 0 8px 10px -6px hsl(338 35% 20% / 0.1);
+    --shadow-gold: 0 4px 14px 0 hsl(343 88% 67% / 0.35);
 
     --sidebar-background: 0 0% 98%;
     --sidebar-foreground: 240 5.3% 26.1%;
@@ -71,33 +71,33 @@
   }
 
   .dark {
-    --background: 220 30% 8%;
-    --foreground: 210 20% 95%;
+    --background: 335 30% 10%;
+    --foreground: 340 20% 96%;
 
-    --card: 220 30% 12%;
-    --card-foreground: 210 20% 95%;
+    --card: 336 28% 14%;
+    --card-foreground: 340 20% 96%;
 
-    --popover: 220 30% 12%;
-    --popover-foreground: 210 20% 95%;
+    --popover: 336 28% 14%;
+    --popover-foreground: 340 20% 96%;
 
-    --primary: 45 90% 55%;
-    --primary-foreground: 220 60% 15%;
+    --primary: 343 88% 67%;
+    --primary-foreground: 0 0% 100%;
 
-    --secondary: 220 30% 18%;
-    --secondary-foreground: 210 20% 95%;
+    --secondary: 336 24% 20%;
+    --secondary-foreground: 340 20% 96%;
 
-    --accent: 45 85% 60%;
-    --accent-foreground: 220 60% 15%;
+    --accent: 334 78% 72%;
+    --accent-foreground: 0 0% 100%;
 
-    --muted: 220 25% 18%;
-    --muted-foreground: 210 15% 60%;
+    --muted: 336 18% 20%;
+    --muted-foreground: 340 12% 72%;
 
     --destructive: 0 62% 30%;
     --destructive-foreground: 0 0% 100%;
 
-    --border: 220 25% 20%;
-    --input: 220 25% 20%;
-    --ring: 45 90% 55%;
+    --border: 336 18% 24%;
+    --input: 336 18% 24%;
+    --ring: 343 88% 67%;
 
     --sidebar-background: 240 5.9% 10%;
     --sidebar-foreground: 240 4.8% 95.9%;

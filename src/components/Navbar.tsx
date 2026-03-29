@@ -3,6 +3,7 @@ import { Link, useLocation } from 'react-router-dom';
 import { Menu, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useSchoolSettings } from '@/hooks/useSchoolSettings';
+import schoolLogo from '@/assets/school-logo.svg';
 
 const navLinks = [
   { name: 'หน้าแรก', href: '/' },
@@ -43,8 +44,8 @@ const Navbar = () => {
         <nav className="flex items-center justify-between h-20">
           {/* Logo */}
           <Link to="/" className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-full bg-primary flex items-center justify-center">
-              <span className="text-accent font-bold text-xl">วค</span>
+            <div className="w-12 h-12 rounded-full bg-white/95 shadow-md ring-2 ring-primary/20 flex items-center justify-center overflow-hidden">
+              <img src={schoolLogo} alt="โลโก้โรงเรียน" className="w-full h-full object-contain" />
             </div>
             <div className="hidden sm:block">
               <h1 className={`text-lg font-bold transition-colors ${scrolled || !isHomePage ? 'text-primary' : 'text-card'}`}>

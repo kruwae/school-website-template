@@ -83,18 +83,26 @@ export const MaintenanceManagement = () => {
     const currentUserName = currentUser?.full_name || '';
     const currentUserUsername = currentUser?.username || '';
     const currentUserPosition = currentUser?.position || '';
+    const normalizedPosition = currentUserPosition.trim().toLowerCase();
+    const normalizedUsername = currentUserUsername.trim().toLowerCase();
     const isAdmin = role === 'admin';
     const MANAGEMENT_POSITIONS = ['หัวหน้าฝ่ายบริหารทั่วไป', 'หัวหน้าอาคารสถานที่'];
     const isTechnicianUser =
         role === 'support_staff' ||
-        currentUserUsername.startsWith('technician') ||
-        currentUserPosition.includes('ช่าง');
+        normalizedUsername.startsWith('technician') ||
+        currentUserPosition.includes('ช่าง') ||
+        currentUserPosition.includes('เจ้าหน้าที่') ||
+        currentUserPosition.includes('อาคารสถานที่');
+    const isMaintenanceManagementUser =
+        MANAGEMENT_POSITIONS.includes(currentUserPosition) ||
+        normalizedPosition.includes('บริหารทั่วไป') ||
+        normalizedPosition.includes('อาคารสถานที่');
     const canManageMaintenanceWork =
         isTechnicianUser ||
+        isMaintenanceManagementUser ||
         isAdmin ||
         role === 'director' ||
-        role === 'deputy_director' ||
-        MANAGEMENT_POSITIONS.includes(currentUserPosition);
+        role === 'deputy_director';
 
     /**
      * canModify rules:
@@ -110,7 +118,7 @@ export const MaintenanceManagement = () => {
                 return isAdmin || r.assigned_to === currentUserName;
             }
 
-            return !r.assigned_to || r.assigned_to === currentUserName || MANAGEMENT_POSITIONS.includes(currentUserPosition);
+            return !r.assigned_to || r.assigned_to === currentUserName || isMaintenanceManagementUser;
         }
 
         return r.status === 'pending' && r.reported_by === currentUserName;
@@ -133,7 +141,7 @@ export const MaintenanceManagement = () => {
     const canUploadDuring = (r: MaintenanceRequest | null) => {
         if (!currentUser || !r) return false;
         const isTechnician = !!r.assigned_to && r.assigned_to === currentUserName;
-        const isManagement = MANAGEMENT_POSITIONS.includes(currentUserPosition);
+        const isManagement = isMaintenanceManagementUser;
         return ['acknowledged', 'in_progress'].includes(r.status) && (isTechnician || isManagement);
     };
 
@@ -443,8 +451,8 @@ export const MaintenanceManagement = () => {
                                             <CheckCircle2 className="w-3.5 h-3.5" />
                                         </Button>
                                     )}
-                                    {isTechnicianUser && !r.assigned_to && r.status !== 'completed' && r.status !== 'cancelled' && (
-                                        <Button variant="ghost" size="icon" className="h-7 w-7 text-orange-600" title="รับงานซ่อม"
+                                    {canManageMaintenanceWork && r.status !== 'completed' && r.status !== 'cancelled' && (
+                                        <Button variant="ghost" size="icon" className="h-7 w-7 text-orange-600" title={r.assigned_to ? 'รับช่วงงานซ่อม' : 'รับงานซ่อม'}
                                             onClick={() => acceptWork(r)}>
                                             <Wrench className="w-3.5 h-3.5" />
                                         </Button>

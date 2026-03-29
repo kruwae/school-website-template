@@ -1,6 +1,7 @@
 import { ChevronUp, Facebook, Youtube, Instagram, Mail, Phone, MapPin, MessageCircle, Link as LinkIcon } from 'lucide-react';
 import { useSchoolSettings } from '@/hooks/useSchoolSettings';
 import { Link } from 'react-router-dom';
+import schoolLogo from '@/assets/school-logo.svg';
 
 const quickLinks = [
   { name: 'หน้าแรก', href: '/' },
@@ -32,8 +33,8 @@ const Footer = () => {
           {/* School Info */}
           <div className="lg:col-span-1">
             <div className="flex items-center gap-3 mb-6">
-              <div className="w-12 h-12 rounded-full bg-accent flex items-center justify-center">
-                <span className="text-accent-foreground font-bold text-xl">วค</span>
+              <div className="w-14 h-14 rounded-full bg-white shadow-lg ring-2 ring-white/40 flex items-center justify-center overflow-hidden">
+                <img src={schoolLogo} alt="โลโก้โรงเรียน" className="w-full h-full object-contain" />
               </div>
               <div>
                 <h3 className="text-lg font-bold">{settings.school_name}</h3>
