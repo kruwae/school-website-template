@@ -201,9 +201,19 @@ VALUES
    'teacher', 'ครูผู้สอนคณิตศาสตร์'),
   ('teacher03', 'นายวิทยา ฉลาดคิด', 'teacher03@school.ac.th',
    'cde383eee8ee7a4400adf7a15f716f179a2eb97646b37e089eb8d6d04e663416',
-   'teacher', 'ครูผู้สอนวิทยาศาสตร์')
+   'teacher', 'ครูผู้สอนวิทยาศาสตร์'),
+  ('technician01', 'นายช่างสมหมาย ซ่อมดี', 'technician01@school.ac.th',
+   '240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9',
+   'support_staff', 'ช่างซ่อมอาคารสถานที่'),
+  ('technician02', 'นายช่างประยุทธ์ แก้ไว', 'technician02@school.ac.th',
+   '240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9',
+   'support_staff', 'ช่างไฟฟ้า'),
+  ('technician03', 'นายช่างอนันต์ ดูแลดี', 'technician03@school.ac.th',
+   '240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9',
+   'support_staff', 'ช่างประปา')
 ON CONFLICT (username) DO UPDATE SET
-  position = EXCLUDED.position;
+  position = EXCLUDED.position,
+  role = EXCLUDED.role;
 
 -- =============================================
 -- STEP 12: เชื่อม department_id กับ users
@@ -218,7 +228,7 @@ UPDATE public.app_users u
 SET department_id = d.id
 FROM public.departments d
 WHERE d.code = 'general'
-  AND u.username IN ('head_general');
+  AND u.username IN ('head_general', 'technician01', 'technician02', 'technician03');
 
 UPDATE public.app_users u
 SET department_id = d.id
@@ -296,6 +306,15 @@ WHERE wg.code = 'wg_iep'
   AND u.username IN ('head_academic','teacher02','teacher03')
 ON CONFLICT (work_group_id, user_id) DO NOTHING;
 
+-- Facility group: head_general, technicians
+INSERT INTO public.work_group_members (work_group_id, user_id, role_in_group)
+SELECT wg.id, u.id,
+  CASE WHEN u.username = 'head_general' THEN 'supervisor' ELSE 'member' END
+FROM public.work_groups wg, public.app_users u
+WHERE wg.code = 'wg_facility'
+  AND u.username IN ('head_general','technician01','technician02','technician03')
+ON CONFLICT (work_group_id, user_id) DO NOTHING;
+
 -- HR group: head_personnel, assistant01, temp01
 INSERT INTO public.work_group_members (work_group_id, user_id, role_in_group)
 SELECT wg.id, u.id,
@@ -318,4 +337,7 @@ ON CONFLICT (work_group_id, user_id) DO NOTHING;
 --   head_student / admin123  → หัวหน้าฝ่ายกิจการนักเรียน
 --   teacher02 / teacher123   → ครูผู้สอนคณิตศาสตร์
 --   teacher03 / teacher123   → ครูผู้สอนวิทยาศาสตร์
+--   technician01 / admin123  → ช่างซ่อมอาคารสถานที่
+--   technician02 / admin123  → ช่างไฟฟ้า
+--   technician03 / admin123  → ช่างประปา
 -- =============================================
