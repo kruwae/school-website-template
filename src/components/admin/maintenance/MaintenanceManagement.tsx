@@ -31,6 +31,23 @@ interface MaintenanceRequest {
     image_after: string | null;
 }
 
+interface TechnicianOption {
+    id: string;
+    full_name: string;
+    username: string;
+    position?: string;
+}
+
+interface MaintenanceRequest {
+    id: string; title: string; location: string; room_number: string;
+    description: string; priority: string; status: string; reported_by: string;
+    reporter_phone: string; assigned_to: string; completion_notes: string;
+    created_at: string;
+    image_before: string | null;
+    image_during: string | null;
+    image_after: string | null;
+}
+
 const PRIORITY_MAP: Record<string, { label: string; color: string }> = {
     low:    { label: 'ต่ำ',      color: 'bg-gray-100 text-gray-700' },
     normal: { label: 'ปกติ',     color: 'bg-blue-100 text-blue-700' },
@@ -143,6 +160,7 @@ export const MaintenanceManagement = () => {
     };
 
     const [records, setRecords] = useState<MaintenanceRequest[]>([]);
+    const [technicians, setTechnicians] = useState<TechnicianOption[]>([]);
     const [loading, setLoading] = useState(true);
     const [filterStatus, setFilterStatus] = useState('all');
     const [filterPriority, setFilterPriority] = useState('all');
@@ -175,7 +193,10 @@ export const MaintenanceManagement = () => {
         image_before: '', image_during: '', image_after: '',
     });
 
-    useEffect(() => { fetchRecords(); }, []);
+    useEffect(() => {
+        fetchRecords();
+        fetchTechnicians();
+    }, []);
 
     const fetchRecords = async () => {
         setLoading(true);
@@ -185,6 +206,22 @@ export const MaintenanceManagement = () => {
             if (data) setRecords(data);
         } catch (e) { console.error(e); }
         finally { setLoading(false); }
+    };
+
+    const fetchTechnicians = async () => {
+        try {
+            const { data } = await (supabase.from('app_users' as any) as any)
+                .select('id, full_name, username, position')
+                .or('username.ilike.technician%,position.ilike.%ช่าง%,position.ilike.%เจ้าหน้าที่%,position.ilike.%อาคารสถานที่%')
+                .eq('is_active', true)
+                .order('full_name');
+
+            if (data) {
+                setTechnicians(data);
+            }
+        } catch (error) {
+            console.error('[maintenance] fetch technicians error:', error);
+        }
     };
 
     const filtered = records.filter(r => {
@@ -650,7 +687,19 @@ export const MaintenanceManagement = () => {
                             </div>
                             <div>
                                 <Label>ผู้รับผิดชอบ</Label>
-                                <Input value={form.assigned_to} onChange={e => setForm(p => ({ ...p, assigned_to: e.target.value }))} />
+                                <Select value={form.assigned_to || '__unassigned__'} onValueChange={v => setForm(p => ({ ...p, assigned_to: v === '__unassigned__' ? '' : v }))}>
+                                    <SelectTrigger>
+                                        <SelectValue placeholder="เลือกช่างผู้รับผิดชอบ" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="__unassigned__">ยังไม่ระบุผู้รับผิดชอบ</SelectItem>
+                                        {technicians.map((technician) => (
+                                            <SelectItem key={technician.id} value={technician.full_name}>
+                                                {technician.full_name}{technician.position ? ` (${technician.position})` : ''}{technician.username ? ` - @${technician.username}` : ''}
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
                             </div>
                         </div>
                         <div>
