@@ -103,6 +103,7 @@ export const MaintenanceManagement = () => {
         isAdmin ||
         role === 'director' ||
         role === 'deputy_director';
+    const canDeleteRecord = isAdmin || isMaintenanceManagementUser;
 
     /**
      * canModify rules:
@@ -298,9 +299,11 @@ export const MaintenanceManagement = () => {
             const omittedImageColumns = IMAGE_COLUMNS.filter(column => !(column in requestPayload));
 
             toast({
-                title: editRecord ? 'อัปเดตสำเร็จ ✅' : 'แจ้งซ่อมสำเร็จ ✅',
+                title: omittedImageColumns.length
+                    ? 'บันทึกข้อมูลสำเร็จ แต่ยังเปิดใช้รูปภาพไม่ครบ'
+                    : editRecord ? 'อัปเดตสำเร็จ ✅' : 'แจ้งซ่อมสำเร็จ ✅',
                 description: omittedImageColumns.length
-                    ? `บันทึกข้อมูลได้แล้ว แต่ฐานข้อมูลยังไม่รองรับคอลัมน์รูปภาพ: ${omittedImageColumns.join(', ')}`
+                    ? `ฐานข้อมูลของระบบนี้ยังไม่มีคอลัมน์รูปภาพ ${omittedImageColumns.join(', ')} กรุณารัน migration ไฟล์ 012_maintenance_images.sql ก่อน จึงจะบันทึกรูปก่อนซ่อม/ระหว่างซ่อม/หลังซ่อมได้`
                     : undefined,
             });
             setShowDialog(false);
@@ -318,6 +321,10 @@ export const MaintenanceManagement = () => {
     };
 
     const handleDelete = async (id: string) => {
+        if (!canDeleteRecord) {
+            toast({ title: 'ไม่มีสิทธิ์ลบรายการนี้', variant: 'destructive' });
+            return;
+        }
         if (!confirm('ต้องการลบรายการนี้?')) return;
         await (supabase.from('maintenance_requests' as any) as any).delete().eq('id', id);
         toast({ title: 'ลบสำเร็จ' });
@@ -466,9 +473,11 @@ export const MaintenanceManagement = () => {
                                             <Button variant="ghost" size="icon" className="h-7 w-7" title="แก้ไข" onClick={() => openEdit(r)}>
                                                 <Edit2 className="w-3.5 h-3.5" />
                                             </Button>
-                                            <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" title="ลบ" onClick={() => handleDelete(r.id)}>
-                                                <Trash2 className="w-3.5 h-3.5" />
-                                            </Button>
+                                            {canDeleteRecord && (
+                                                <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" title="ลบ" onClick={() => handleDelete(r.id)}>
+                                                    <Trash2 className="w-3.5 h-3.5" />
+                                                </Button>
+                                            )}
                                         </>
                                     ) : (
                                         <span className="text-xs text-muted-foreground px-2" title="ไม่มีสิทธิ์แก้ไขรายการนี้">–</span>
