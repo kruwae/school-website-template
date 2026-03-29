@@ -1064,12 +1064,12 @@ export const DutyManagement = () => {
             </Dialog>
 
             <Dialog open={showRecordDialog} onOpenChange={setShowRecordDialog}>
-                <DialogContent className="max-w-2xl">
+                <DialogContent className="max-w-2xl max-h-[90vh] overflow-hidden">
                     <DialogHeader>
                         <DialogTitle>บันทึกเวรตามวันที่กำหนด</DialogTitle>
                     </DialogHeader>
                     {recordForm && selectedAssignment && (
-                        <div className="space-y-4">
+                        <div className="space-y-4 overflow-y-auto max-h-[calc(90vh-140px)] pr-2">
                             <div className="rounded-lg border bg-muted/20 p-3">
                                 <p className="text-sm font-medium">
                                     วันที่ {new Date(selectedAssignment.duty_date).toLocaleDateString('th-TH')} • {selectedAssignment.duty_shift_label}
