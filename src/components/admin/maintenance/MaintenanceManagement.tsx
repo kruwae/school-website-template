@@ -47,6 +47,23 @@ const STATUS_MAP: Record<string, { label: string; variant: 'default' | 'secondar
 
 const IMAGE_COLUMNS = ['image_before', 'image_during', 'image_after'] as const;
 
+const getStatusDescription = (status: string) => {
+    switch (status) {
+        case 'pending':
+            return 'รอเจ้าหน้าที่รับเรื่อง';
+        case 'acknowledged':
+            return 'เจ้าหน้าที่รับเรื่องแล้ว';
+        case 'in_progress':
+            return 'อยู่ระหว่างการซ่อมหรือดำเนินการ';
+        case 'completed':
+            return 'ซ่อมเสร็จเรียบร้อยแล้ว';
+        case 'cancelled':
+            return 'รายการถูกยกเลิก';
+        default:
+            return status;
+    }
+};
+
 const getMissingSchemaColumn = (errorMessage?: string | null) => {
     if (!errorMessage) return null;
     const match = errorMessage.match(/Could not find the '([^']+)' column/i);
@@ -406,6 +423,12 @@ export const MaintenanceManagement = () => {
                                         {r.assigned_to && ` • ผู้รับผิดชอบ: ${r.assigned_to}`}
                                     </p>
                                     <p className="text-xs text-muted-foreground mt-1 line-clamp-1">{r.description}</p>
+                                    {!canManageMaintenanceWork && (
+                                        <div className="mt-2 inline-flex items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-2.5 py-1.5">
+                                            <span className="text-[11px] font-semibold text-blue-700">สถานะการซ่อม</span>
+                                            <span className="text-[11px] text-blue-800">{getStatusDescription(r.status)}</span>
+                                        </div>
+                                    )}
 
                                     {/* ภาพย่อ 3 ระยะ */}
                                     {imageCount(r) > 0 && (
@@ -501,6 +524,12 @@ export const MaintenanceManagement = () => {
                     {viewRecord && (
                         <div className="space-y-4 text-sm">
                             <div className="grid grid-cols-2 gap-3">
+                                {!canManageMaintenanceWork && (
+                                    <div className="col-span-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2">
+                                        <span className="text-blue-700 block text-xs font-semibold">สถานะการซ่อมล่าสุด</span>
+                                        <span className="text-sm text-blue-900">{getStatusDescription(viewRecord.status)}</span>
+                                    </div>
+                                )}
                                 <div><span className="text-muted-foreground block text-xs">หัวข้อ</span><span className="font-medium">{viewRecord.title}</span></div>
                                 <div><span className="text-muted-foreground block text-xs">สถานะ</span>
                                     <Badge variant={STATUS_MAP[viewRecord.status]?.variant}>{STATUS_MAP[viewRecord.status]?.label}</Badge>
