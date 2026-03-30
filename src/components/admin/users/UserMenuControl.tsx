@@ -26,8 +26,7 @@ interface AppUser {
     username: string;
     full_name: string;
     role: UserRole;
-    position?: string;
-    email?: string;
+    position?: string; email?: string;
     staff_id?: string;
     is_active: boolean;
 }
@@ -40,6 +39,7 @@ const ROLE_LABELS: Record<UserRole, string> = {
     teacher: 'ครูผู้สอน',
     support_staff: 'เจ้าหน้าที่',
     temp_employee: 'ครูอัตราจ้าง',
+    temp_staff: 'ลูกจ้างชั่วคราว',
     assistant: 'ครูพี่เลี้ยง',
 };
 
@@ -51,6 +51,7 @@ const ROLE_COLORS: Record<string, string> = {
     teacher: 'bg-green-100 text-green-700',
     support_staff: 'bg-teal-100 text-teal-700',
     temp_employee: 'bg-orange-100 text-orange-700',
+    temp_staff: 'bg-amber-100 text-amber-700',
     assistant: 'bg-yellow-100 text-yellow-700',
 };
 

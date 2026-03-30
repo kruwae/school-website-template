@@ -8,7 +8,8 @@ export type UserRole =
   | 'teacher'
   | 'support_staff'
   | 'temp_employee'
-  | 'assistant';
+  | 'assistant'
+  | 'temp_staff';
 
 export interface AppUser {
   id: string;
@@ -95,7 +96,7 @@ export function isLoggedIn(): boolean {
 export const ADMIN_ROLES: UserRole[] = ['admin', 'director', 'deputy_director', 'dept_head'];
 
 /** Roles that go to evaluatee portal */
-export const EVALUATEE_ROLES: UserRole[] = ['assistant', 'temp_employee'];
+export const EVALUATEE_ROLES: UserRole[] = ['assistant', 'temp_employee', 'temp_staff'];
 
 /** Redirect path based on role — ทุก role ใช้ dashboard เดียวกัน (menu จำกัดตาม permissions) */
 export function getRedirectPath(role: UserRole): string {
