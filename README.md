@@ -1,4 +1,4 @@
-# School Website Template (โรงเรียนห้องสื่อครูคอมวิทยาคม)
+# School Website Template (โรงเรียนโสตศึกษา)
 
 A modern, responsive, and customizable school website template built with React, Vite, Tailwind CSS, and Supabase.
 

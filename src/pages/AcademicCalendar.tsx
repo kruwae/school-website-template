@@ -27,10 +27,11 @@ interface Event {
   id: string;
   title: string;
   description: string | null;
-  event_date: string;
+  event_date: string | null;
   event_time: string | null;
   location: string | null;
   category: string | null;
+  image_url?: string | null;
 }
 
 const AcademicCalendar = () => {
@@ -46,14 +47,26 @@ const AcademicCalendar = () => {
 
   const fetchEvents = async () => {
     try {
-      const { data, error } = await supabase
-        .from('events')
-        .select('*')
+      const { data, error } = await (supabase.from('events' as any) as any)
+        .select('id, title, description, event_date, event_time, location, category, image_url')
         .eq('status', 'published')
         .order('event_date', { ascending: true });
 
+      const normalizedEvents = Array.isArray(data)
+        ? data.map((event: any) => ({
+            id: event.id,
+            title: event.title,
+            description: event.description ?? null,
+            event_date: event.event_date ?? null,
+            event_time: event.event_time ?? null,
+            location: event.location ?? null,
+            category: event.category ?? null,
+            image_url: event.image_url ?? null,
+          })) as Event[]
+        : [];
+
       if (error) throw error;
-      setEvents(data || []);
+      setEvents(normalizedEvents);
     } catch (error) {
       console.error('Error fetching events:', error);
     } finally {
@@ -66,7 +79,7 @@ const AcademicCalendar = () => {
     const currentYear = new Date().getFullYear();
 
     return events.filter(event => {
-      const eventDate = new Date(event.event_date);
+      const eventDate = new Date(event.event_date || Date.now());
       const month = eventDate.getMonth() + 1; // 1-12
 
       if (semester === '1') {
@@ -105,7 +118,7 @@ const AcademicCalendar = () => {
             ปฏิทินการศึกษา {settings.academic_year}
           </h1>
           <p className="text-card/80 text-lg max-w-2xl mx-auto">
-            กำหนดการสำคัญตลอดปีการศึกษาของโรงเรียนห้องสื่อครูคอมวิทยาคม
+            กำหนดการสำคัญตลอดปีการศึกษาของโรงเรียนโสตศึกษา
           </p>
         </div>
       </section>
@@ -169,7 +182,8 @@ const AcademicCalendar = () => {
                     {/* Events */}
                     <div className="space-y-6">
                       {filteredEvents.map((event) => {
-                        const eventType = eventTypes[event.category as keyof typeof eventTypes] || eventTypes.general;
+                        const eventTypeKey = (event.category || 'general') as keyof typeof eventTypes;
+                        const eventType = eventTypes[eventTypeKey] || eventTypes.general;
                         const Icon = eventType.icon;
 
                         return (
