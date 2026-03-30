@@ -115,7 +115,7 @@ const defaultSettings: SchoolSettings = {
     about_stat_4_label: 'ฝ่ายงานหลัก',
     contact_address: '11 ถนนกาญจนวนิช ตำบลหาดใหญ่ อำเภอหาดใหญ่ จังหวัดสงขลา 90110',
     contact_phone: '074-311-XXX',
-    contact_email: 'sottsongkhla@special.ac.th',
+    contact_email: 'waeharong@sodsongkhla.ac.th',
     contact_fax: '074-311-XXX',
     contact_hours: 'จันทร์ - ศุกร์ 07:30 - 16:30 น.',
     contact_map_url: 'https://www.sodsongkhla.ac.th',
