@@ -325,10 +325,12 @@ export const DutyManagement = () => {
     };
 
     const myAssignments = useMemo(() => {
-        return assignments.filter(item => {
-            const relatedRecord = recordByAssignmentId.get(item.id);
-            return canSeeDutyAssignment(item, relatedRecord) && item.status !== 'cancelled';
-        });
+        return assignments
+            .filter(item => {
+                const relatedRecord = recordByAssignmentId.get(item.id);
+                return canSeeDutyAssignment(item, relatedRecord) && item.status !== 'cancelled';
+            })
+            .sort((a, b) => a.duty_date.localeCompare(b.duty_date) || a.duty_shift.localeCompare(b.duty_shift));
     }, [assignments, recordByAssignmentId, currentUserId, currentUserName, isScheduleManager, canManageReports]);
 
     const filteredAssignments = useMemo(() => {
@@ -1391,11 +1393,13 @@ export const DutyManagement = () => {
                             </div>
 
                             {!isScheduleManager ? (
-                                <Card>
-                                    <CardContent className="p-8 text-center text-muted-foreground">
-                                        คุณยังสามารถกำหนดเวรของตนเองได้ตามปกติ ส่วนมุมมองกำหนดเวรภาพรวมสงวนไว้สำหรับหัวหน้ากิจการนักเรียนและหัวหน้าฝ่ายบริหารงานทั่วไป
-                                    </CardContent>
-                                </Card>
+                                loading ? (
+                                    <Card><CardContent className="p-8 text-center text-muted-foreground">กำลังโหลด...</CardContent></Card>
+                                ) : myAssignments.length === 0 ? (
+                                    <Card><CardContent className="p-8 text-center text-muted-foreground">ยังไม่มีรายการกำหนดเข้าเวรของคุณ</CardContent></Card>
+                                ) : (
+                                    myAssignments.map(item => renderAssignmentCard(item, true))
+                                )
                             ) : loading ? (
                                 <Card><CardContent className="p-8 text-center text-muted-foreground">กำลังโหลด...</CardContent></Card>
                             ) : filteredAssignments.length === 0 ? (
