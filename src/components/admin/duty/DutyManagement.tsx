@@ -360,6 +360,17 @@ export const DutyManagement = () => {
         return filteredAssignments.filter(item => item.duty_date.startsWith(filterMonth));
     }, [filteredAssignments, filterMonth]);
 
+    const pendingApprovalItems = useMemo(() => {
+        if (!isScheduleManager && !canManageReports) return [];
+        return (records || [])
+            .filter(record => record.status === 'verified' && (!record.swap_requested || record.swap_response_status === 'accepted'))
+            .map(record => {
+                const assignment = assignments.find(a => a.id === record.assignment_id);
+                return { record, assignment };
+            })
+            .filter(item => !!item.assignment);
+    }, [records, assignments, isScheduleManager, canManageReports]);
+
     const calendarDays = useMemo(() => getMonthGridDays(filterMonth || new Date().toISOString().slice(0, 7)), [filterMonth]);
 
     const calendarItemsByDate = useMemo(() => {
@@ -1371,6 +1382,26 @@ export const DutyManagement = () => {
                                     <Badge className="bg-emerald-50 text-emerald-900 border-emerald-200">บันทึกแล้ว</Badge>
                                 </div>
                             </div>
+
+                            {(isScheduleManager || canManageReports) && pendingApprovalItems.length > 0 && (
+                                <div className="rounded-lg border border-yellow-300 bg-yellow-50 p-3 text-sm text-yellow-900">
+                                    <div className="font-semibold mb-2">รายการรออนุมัติ ({pendingApprovalItems.length})</div>
+                                    {pendingApprovalItems.map(item => (
+                                        <div key={item.record.id} className="rounded-lg border border-yellow-200 bg-white p-3 mb-2">
+                                            <div className="flex justify-between items-center gap-3">
+                                                <div>
+                                                    <div className="font-semibold">{item.assignment?.assigned_name || 'ไม่มีผู้รับเวร'}</div>
+                                                    <div className="text-xs text-muted-foreground">{new Date(item.record.duty_date).toLocaleDateString('th-TH')} • {item.record.duty_shift_label}</div>
+                                                </div>
+                                                <Button size="xs" onClick={() => handleSubmitForApproval(item.record)}>
+                                                    อนุมัติเวร
+                                                </Button>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+
 
                             {loading ? (
                                 <Card><CardContent className="p-8 text-center text-muted-foreground">กำลังโหลด...</CardContent></Card>
