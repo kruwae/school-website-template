@@ -383,6 +383,11 @@ export const DutyManagement = () => {
         return map;
     }, [monthAssignments, recordByAssignmentId]);
 
+    const pendingApprovalCount = useMemo(() => {
+        if (!isScheduleManager && !canManageReports) return 0;
+        return records.filter(record => record.status === 'verified' || record.status === 'approved' || (record.swap_requested && record.swap_response_status === 'accepted')).length;
+    }, [records, isScheduleManager, canManageReports]);
+
     const selectableStaff = useMemo(() => {
         return staffList.filter(person => person.id !== currentUserId);
     }, [staffList, currentUserId]);
@@ -1281,6 +1286,11 @@ export const DutyManagement = () => {
                         <p className="text-muted-foreground text-sm mt-1">
                             มุมมองใหม่แบบปฏิทิน เน้นสถานะสำคัญ ปุ่มชัด และลดข้อความยาวที่ไม่จำเป็น
                         </p>
+                        {(isScheduleManager || canManageReports) && pendingApprovalCount > 0 && (
+                            <div className="mt-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                                มีรายการส่งคำขออนุมัติ {pendingApprovalCount} รายการ (แสดงต่อหัวหน้ากิจการนักเรียน / รองผอ.บริหาร)
+                            </div>
+                        )}
                     </div>
 
                     <div className="flex flex-wrap gap-3 items-center">

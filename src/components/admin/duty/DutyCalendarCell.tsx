@@ -55,13 +55,16 @@ export const DutyCalendarCell = ({ dateLabel, dayNumber, isCurrentMonth, isToday
 
             <div className="mt-2 space-y-2">
                 {items.slice(0, 4).map(item => {
-                    const displayedName = item.finalDutyName || item.ownerName;
+                    const dutyName = item.finalDutyName || item.ownerName || '-';
+                    const responsibilityLabel = item.finalDutyName ? `ผู้ปฏิบัติเวร: ${item.finalDutyName}` : `เจ้าของเวร: ${item.ownerName}`;
+
                     return (
                         <div key={item.id} className={cn('rounded-lg border px-2 py-1.5 text-xs shadow-sm', getItemTone(item))}>
-                            <div className="flex items-center justify-between gap-2">
-                                <span className="min-w-0 flex-1 truncate font-semibold">{displayedName}</span>
-                                <span className="shrink-0 text-[10px] font-medium leading-none opacity-80">{item.statusLabel}</span>
+                            <div className="flex flex-col gap-0.5">
+                                <div className="font-semibold truncate">{dutyName}</div>
+                                <div className="text-[10px] opacity-80">{responsibilityLabel}</div>
                             </div>
+                            <div className="mt-1 text-[10px] font-medium text-right opacity-80">{item.statusLabel}</div>
                         </div>
                     );
                 })}
