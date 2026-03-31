@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Plus, CalendarCheck, Trash2, Edit2, RefreshCcw, CheckCheck, Send, UserPlus, ClipboardPen, Upload, Image as ImageIcon, X, Loader2, FileText, Download, Users, ShieldCheck } from 'lucide-react';
+import { CalendarCheck, Trash2, Edit2, RefreshCcw, CheckCheck, Send, UserPlus, ClipboardPen, Upload, Image as ImageIcon, X, Loader2, FileText, Download, Users, ShieldCheck } from 'lucide-react';
 import {
     Select, SelectContent, SelectItem, SelectTrigger, SelectValue
 } from '@/components/ui/select';
@@ -18,6 +18,7 @@ import { getCurrentUser } from '@/lib/auth';
 import { usePermissions } from '@/hooks/usePermissions';
 import { useStaffList } from '@/hooks/useStaffList';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { DutyCalendarCell, DutyCalendarItem } from './DutyCalendarCell';
 
 interface DutyAssignment {
     id: string;
@@ -180,6 +181,25 @@ const isHeadManagerPosition = (position: string) => {
     return positionText.includes('หัวหน้ากิจการนักเรียน') || positionText.includes('หัวหน้าฝ่ายบริหารงานทั่วไป');
 };
 
+const getMonthGridDays = (monthValue: string) => {
+    const [year, month] = monthValue.split('-').map(Number);
+    const firstDay = new Date(year, month - 1, 1);
+    const start = new Date(firstDay);
+    const dayOfWeek = start.getDay();
+    start.setDate(start.getDate() - dayOfWeek);
+    const days: Date[] = [];
+    for (let i = 0; i < 42; i += 1) {
+        const current = new Date(start);
+        current.setDate(start.getDate() + i);
+        days.push(current);
+    }
+    return days;
+};
+
+const formatThaiShortDate = (date: Date) => date.toLocaleDateString('th-TH', { weekday: 'short', day: 'numeric' });
+
+const formatThaiDay = (date: Date) => date.toLocaleDateString('th-TH', { day: 'numeric' });
+
 export const DutyManagement = () => {
     const { toast } = useToast();
     const currentUser = getCurrentUser();
@@ -198,7 +218,7 @@ export const DutyManagement = () => {
 
     const [activeTab, setActiveTab] = useState('assignments');
     const [loading, setLoading] = useState(true);
-    const [filterMonth, setFilterMonth] = useState('');
+    const [filterMonth, setFilterMonth] = useState(new Date().toISOString().slice(0, 7));
     const [assignments, setAssignments] = useState<DutyAssignment[]>([]);
     const [records, setRecords] = useState<DutyRecord[]>([]);
     const [showAssignmentDialog, setShowAssignmentDialog] = useState(false);
@@ -274,6 +294,36 @@ export const DutyManagement = () => {
     const filteredRecords = useMemo(() => {
         return records.filter(item => !filterMonth || item.duty_date.startsWith(filterMonth));
     }, [records, filterMonth]);
+
+    const monthAssignments = useMemo(() => {
+        return filteredAssignments.filter(item => item.duty_date.startsWith(filterMonth));
+    }, [filteredAssignments, filterMonth]);
+
+    const calendarDays = useMemo(() => getMonthGridDays(filterMonth || new Date().toISOString().slice(0, 7)), [filterMonth]);
+
+    const calendarItemsByDate = useMemo(() => {
+        const map = new Map<string, DutyCalendarItem[]>();
+        monthAssignments.forEach(assignment => {
+            const record = recordByAssignmentId.get(assignment.id);
+            const key = assignment.duty_date;
+            const items = map.get(key) || [];
+            items.push({
+                id: assignment.id,
+                title: assignment.duty_shift_label || SHIFT_MAP[assignment.duty_shift] || assignment.duty_shift,
+                subtitle: assignment.notes || undefined,
+                ownerName: assignment.assigned_name,
+                finalDutyName: record?.final_duty_name || assignment.assigned_name,
+                finalDutyPosition: record?.final_duty_position || assignment.assigned_position || undefined,
+                statusLabel: record?.status ? (STATUS_MAP[record.status] || record.status) : (ASSIGNMENT_STATUS_MAP[assignment.status] || assignment.status),
+                swapResponseStatus: record?.swap_response_status || null,
+                approvalReady: record?.approval_ready,
+                status: record?.status || assignment.status,
+                notes: assignment.notes || null,
+            });
+            map.set(key, items);
+        });
+        return map;
+    }, [monthAssignments, recordByAssignmentId]);
 
     const selectableStaff = useMemo(() => {
         return staffList.filter(person => person.id !== currentUserId);
@@ -1154,7 +1204,7 @@ export const DutyManagement = () => {
                             <CalendarCheck className="w-6 h-6 text-green-600" /> จัดการเวรประจำวัน
                         </h1>
                         <p className="text-muted-foreground text-sm mt-1">
-                            มุมมองใหม่แบบกระชับ เน้นสถานะสำคัญ ปุ่มชัด และลดข้อความยาวที่ไม่จำเป็น
+                            มุมมองใหม่แบบปฏิทิน เน้นสถานะสำคัญ ปุ่มชัด และลดข้อความยาวที่ไม่จำเป็น
                         </p>
                     </div>
 
@@ -1210,31 +1260,61 @@ export const DutyManagement = () => {
                         <CardContent className="p-4 space-y-2">
                             <p className="font-medium">ภาพรวมการกำหนดเข้าเวร</p>
                             <p className="text-sm text-muted-foreground">
-                                แต่ละคนสามารถกำหนดเวรของตนเองล่วงหน้าได้ และปุ่มกำหนดเข้าเวรในภาพรวมเป็นหน้าที่ของหัวหน้ากิจการนักเรียนหรือหัวหน้าฝ่ายบริหารงานทั่วไป
+                                ปฏิทินแสดงเวรของเดือนที่เลือกพร้อมสถานะการแลกเวร การรับเวร และผู้ปฏิบัติเวรสุดท้าย
                             </p>
                         </CardContent>
                     </Card>
 
-                    <div className="grid xl:grid-cols-2 gap-6">
+                    <div className="grid xl:grid-cols-[1.45fr_1fr] gap-6">
                         <div className="space-y-4">
-                            <div>
-                                <h2 className="text-lg font-semibold">เวรของฉันตามปฏิทินงาน</h2>
-                                <p className="text-sm text-muted-foreground">แสดงเฉพาะวันที่คุณต้องเข้าเวร และสามารถกดไปบันทึกหรือขอเปลี่ยนเวรได้</p>
+                            <div className="flex items-end justify-between gap-4">
+                                <div>
+                                    <h2 className="text-lg font-semibold">ปฏิทินกำหนดเข้าเวร</h2>
+                                    <p className="text-sm text-muted-foreground">แสดงรายการตามเดือนที่เลือกแบบปฏิทินรายเดือน</p>
+                                </div>
+                                <div className="flex flex-wrap gap-2 text-xs">
+                                    <Badge variant="outline">กำหนดเวร</Badge>
+                                    <Badge className="bg-sky-50 text-sky-900 border-sky-200">พร้อมอนุมัติ</Badge>
+                                    <Badge className="bg-amber-50 text-amber-900 border-amber-200">รอรับเวร</Badge>
+                                    <Badge className="bg-emerald-50 text-emerald-900 border-emerald-200">บันทึกแล้ว</Badge>
+                                </div>
                             </div>
 
                             {loading ? (
                                 <Card><CardContent className="p-8 text-center text-muted-foreground">กำลังโหลด...</CardContent></Card>
-                            ) : myAssignments.length === 0 ? (
-                                <Card><CardContent className="p-8 text-center text-muted-foreground">ยังไม่มีเวรที่กำหนดให้คุณ</CardContent></Card>
                             ) : (
-                                myAssignments.map(item => renderAssignmentCard(item, true))
+                                <div className="rounded-2xl border bg-background p-3">
+                                    <div className="grid grid-cols-7 gap-2 text-center text-xs font-medium text-muted-foreground mb-2">
+                                        {['อา', 'จ', 'อ', 'พ', 'พฤ', 'ศ', 'ส'].map(day => (
+                                            <div key={day} className="py-2">{day}</div>
+                                        ))}
+                                    </div>
+                                    <div className="grid grid-cols-7 gap-2">
+                                        {calendarDays.map(date => {
+                                            const key = date.toISOString().split('T')[0];
+                                            const items = calendarItemsByDate.get(key) || [];
+                                            const isCurrentMonth = key.startsWith(filterMonth);
+                                            const isToday = key === new Date().toISOString().split('T')[0];
+                                            return (
+                                                <DutyCalendarCell
+                                                    key={key}
+                                                    dateLabel={formatThaiShortDate(date)}
+                                                    dayNumber={formatThaiDay(date)}
+                                                    isCurrentMonth={isCurrentMonth}
+                                                    isToday={isToday}
+                                                    items={items}
+                                                />
+                                            );
+                                        })}
+                                    </div>
+                                </div>
                             )}
                         </div>
 
                         <div className="space-y-4">
                             <div>
                                 <h2 className="text-lg font-semibold">รายการกำหนดเข้าเวรทั้งหมด</h2>
-                                <p className="text-sm text-muted-foreground">ใช้สำหรับตรวจสอบเวรที่ถูกมอบหมายในแต่ละวัน โดยส่วนภาพรวมนี้เน้นสำหรับผู้รับผิดชอบหลัก</p>
+                                <p className="text-sm text-muted-foreground">ใช้สำหรับตรวจสอบรายการแบบละเอียดและจัดการ CRUD ได้ตามสิทธิ์</p>
                             </div>
 
                             {!isScheduleManager ? (
@@ -1392,18 +1472,18 @@ export const DutyManagement = () => {
                         <DialogTitle>บันทึกเวรตามวันที่กำหนด</DialogTitle>
                     </DialogHeader>
                     {recordForm && selectedAssignment && (
-                            <div className="space-y-4 overflow-y-auto max-h-[calc(90vh-140px)] pr-2">
-                                {(() => {
-                                    const currentRecord = recordByAssignmentId.get(selectedAssignment.id);
-                                    if (!canOpenRecordDialog(selectedAssignment, currentRecord)) {
-                                        return (
-                                            <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
-                                                ต้องผ่านขั้นตอนตกลง/แลกเวร ส่งอนุมัติ และอนุมัติก่อน จึงจะบันทึกเวรและอัปโหลดรูปภาพได้
-                                            </div>
-                                        );
-                                    }
-                                    return null;
-                                })()}
+                        <div className="space-y-4 overflow-y-auto max-h-[calc(90vh-140px)] pr-2">
+                            {(() => {
+                                const currentRecord = recordByAssignmentId.get(selectedAssignment.id);
+                                if (!canOpenRecordDialog(selectedAssignment, currentRecord)) {
+                                    return (
+                                        <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+                                            ต้องผ่านขั้นตอนตกลง/แลกเวร ส่งอนุมัติ และอนุมัติก่อน จึงจะบันทึกเวรและอัปโหลดรูปภาพได้
+                                        </div>
+                                    );
+                                }
+                                return null;
+                            })()}
                             <div className="rounded-lg border bg-muted/20 p-3">
                                 <p className="text-sm font-medium">
                                     วันที่ {new Date(selectedAssignment.duty_date).toLocaleDateString('th-TH')} • {selectedAssignment.duty_shift_label}

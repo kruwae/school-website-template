@@ -1,10 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Plus, FileText, Download, Trash2, FolderOpen, Users } from 'lucide-react';
+import { Plus, FileText, Download, Trash2, FolderOpen, Users, Lock } from 'lucide-react';
 import {
     Select, SelectContent, SelectItem, SelectTrigger, SelectValue
 } from '@/components/ui/select';
@@ -53,6 +53,10 @@ export const DepartmentDocuments = ({ deptCode, deptName, color }: Props) => {
     const currentUser = getCurrentUser();
     const currentUserName = currentUser?.full_name || '';
 
+    const canSeeAllDocuments = currentUser
+        ? ['admin', 'director', 'deputy_director', 'dept_head'].includes(currentUser.role)
+        : false;
+
     /** เจ้าของไฟล์หรือ admin เท่านั้นที่ลบได้ */
     const canDelete = (doc: Document): boolean => {
         if (!currentUser) return false;
@@ -84,31 +88,6 @@ export const DepartmentDocuments = ({ deptCode, deptName, color }: Props) => {
             const id = deptData.id;
             setDeptId(id);
 
-            // ตรวจสอบ role — dept_head เห็นเฉพาะเอกสารสมาชิกกลุ่มงานตน
-            const user = getCurrentUser();
-            let memberUserIds: string[] | null = null;
-
-            if (user?.role === 'dept_head') {
-                // หา work_groups ที่ user เป็น supervisor
-                const { data: wgData } = await (supabase.from('work_groups' as any) as any)
-                    .select('id')
-                    .eq('supervisor_id', user.id)
-                    .eq('department_id', id);
-
-                if (wgData && wgData.length > 0) {
-                    const groupIds = wgData.map((g: any) => g.id);
-                    // หา members ของกลุ่มงานเหล่านั้น
-                    const { data: memberData } = await (supabase.from('work_group_members' as any) as any)
-                        .select('user_id')
-                        .in('work_group_id', groupIds);
-                    if (memberData) {
-                        memberUserIds = [...new Set(memberData.map((m: any) => m.user_id))] as string[];
-                    }
-                }
-            }
-
-            // สร้าง query — ถ้า dept_head มี members ให้กรองด้วย uploader_user_id
-            // ถ้าไม่มีก็แสดงทั้งฝ่าย (admin/director/deputy_director)
             let docsQuery = (supabase.from('documents' as any) as any)
                 .select('*, document_categories(name)')
                 .eq('department_id', id)
@@ -122,13 +101,8 @@ export const DepartmentDocuments = ({ deptCode, deptName, color }: Props) => {
 
             let docs = docsRes.data || [];
 
-            // กรองฝั่ง client ถ้า dept_head และมีรายชื่อสมาชิก
-            if (memberUserIds && memberUserIds.length > 0) {
-                docs = docs.filter((d: any) =>
-                    memberUserIds!.includes(d.uploader_user_id) ||
-                    // fallback: ถ้ายังไม่มี uploader_user_id ให้แสดงทั้งหมดในฝ่าย
-                    !d.uploader_user_id
-                );
+            if (!canSeeAllDocuments) {
+                docs = docs.filter((d: Document) => d.uploader_user_id === currentUser?.id);
             }
 
             setDocuments(docs);
@@ -137,11 +111,13 @@ export const DepartmentDocuments = ({ deptCode, deptName, color }: Props) => {
         finally { setLoading(false); }
     };
 
-    const filtered = documents.filter(d => {
-        const matchCat = filterCat === 'all' || d.category_id === filterCat;
-        const matchYear = d.academic_year === filterYear || filterYear === 'all';
-        return matchCat && matchYear;
-    });
+    const filtered = useMemo(() => {
+        return documents.filter(d => {
+            const matchCat = filterCat === 'all' || d.category_id === filterCat;
+            const matchYear = d.academic_year === filterYear || filterYear === 'all';
+            return matchCat && matchYear;
+        });
+    }, [documents, filterCat, filterYear]);
 
     const openAdd = () => {
         setEditDoc(null);
@@ -191,7 +167,6 @@ export const DepartmentDocuments = ({ deptCode, deptName, color }: Props) => {
         fetchDeptAndDocs();
     };
 
-    // Group by category
     const byCategory: Record<string, Document[]> = {};
     filtered.forEach(d => {
         const cat = (d.document_categories as any)?.name || 'ไม่ระบุหมวด';
@@ -210,7 +185,7 @@ export const DepartmentDocuments = ({ deptCode, deptName, color }: Props) => {
                         <h1 className="text-xl font-bold">{deptName}</h1>
                         <div className="flex items-center gap-2 mt-0.5">
                             <p className="text-sm text-muted-foreground">เอกสารและรายงาน</p>
-                            {getCurrentUser()?.role === 'dept_head' && (
+                            {currentUser?.role === 'dept_head' && (
                                 <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 bg-purple-100 text-purple-700 rounded-full font-medium">
                                     <Users className="w-3 h-3" />
                                     กลุ่มงานของฉัน
@@ -224,7 +199,13 @@ export const DepartmentDocuments = ({ deptCode, deptName, color }: Props) => {
                 </Button>
             </div>
 
-            {/* Filters */}
+            {!canSeeAllDocuments && (
+                <div className="flex items-center gap-2 mb-6 px-4 py-2.5 rounded-lg bg-amber-50 border border-amber-200 text-amber-800 text-sm">
+                    <Lock className="w-4 h-4 flex-shrink-0" />
+                    <span>คุณเห็นเฉพาะเอกสารของคุณในฝ่ายนี้เท่านั้น</span>
+                </div>
+            )}
+
             <div className="flex gap-3 mb-6">
                 <Select value={filterCat} onValueChange={setFilterCat}>
                     <SelectTrigger className="w-48"><SelectValue placeholder="ทุกหมวด" /></SelectTrigger>
@@ -243,7 +224,6 @@ export const DepartmentDocuments = ({ deptCode, deptName, color }: Props) => {
                 <span className="text-sm text-muted-foreground self-center">{filtered.length} รายการ</span>
             </div>
 
-            {/* Documents by Category */}
             {loading ? (
                 <div className="p-12 text-center text-muted-foreground">กำลังโหลด...</div>
             ) : Object.keys(byCategory).length === 0 ? (
@@ -298,7 +278,6 @@ export const DepartmentDocuments = ({ deptCode, deptName, color }: Props) => {
                 </div>
             )}
 
-            {/* Add Dialog */}
             <Dialog open={showDialog} onOpenChange={setShowDialog}>
                 <DialogContent className="max-w-md">
                     <DialogHeader>

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -51,6 +51,11 @@ export const DocumentsManagement = () => {
     const currentUser = getCurrentUser();
     const currentUserName = currentUser?.full_name || '';
 
+    /** หัวหน้า/ผู้บริหารเห็นทั้งหมด, สมาชิกทั่วไปเห็นเฉพาะเอกสารของตน */
+    const canSeeAllDocuments = currentUser
+        ? ['admin', 'director', 'deputy_director', 'dept_head'].includes(currentUser.role)
+        : false;
+
     /** เฉพาะ role = admin เท่านั้นที่มีสิทธิ์เต็ม (เพิ่ม/แก้ไข/ลบ) */
     const isAdmin = currentUser?.role === 'admin';
 
@@ -97,7 +102,17 @@ export const DocumentsManagement = () => {
         finally { setLoading(false); }
     };
 
-    const filteredDocs = documents.filter(d => {
+    const visibleDocuments = useMemo(() => {
+        if (canSeeAllDocuments) {
+            return documents;
+        }
+        if (!currentUser) {
+            return [];
+        }
+        return documents.filter((doc) => doc.uploader_user_id === currentUser.id);
+    }, [canSeeAllDocuments, currentUser, documents]);
+
+    const filteredDocs = visibleDocuments.filter(d => {
         const matchSearch = !search
             || d.title.toLowerCase().includes(search.toLowerCase())
             || d.uploader_name?.toLowerCase().includes(search.toLowerCase());
@@ -188,9 +203,9 @@ export const DocumentsManagement = () => {
                         <FileText className="w-6 h-6 text-blue-600" /> คลังเอกสารทั้งหมด
                     </h1>
                     <p className="text-muted-foreground text-sm">
-                        {isAdmin
-                            ? 'จัดการเอกสารของทุกฝ่ายงาน (สิทธิ์เต็ม)'
-                            : 'ดูและดาวน์โหลดเอกสารของทุกฝ่ายงาน'}
+                        {isAdmin || canSeeAllDocuments
+                            ? 'จัดการเอกสารของทุกฝ่ายงาน'
+                            : 'ดูและดาวน์โหลดเฉพาะเอกสารของคุณ'}
                     </p>
                 </div>
                 {isAdmin && (
@@ -201,10 +216,10 @@ export const DocumentsManagement = () => {
             </div>
 
             {/* Permission Banner */}
-            {!isAdmin && (
+            {!canSeeAllDocuments && (
                 <div className="flex items-center gap-2 mb-4 px-4 py-2.5 rounded-lg bg-amber-50 border border-amber-200 text-amber-800 text-sm">
                     <Lock className="w-4 h-4 flex-shrink-0" />
-                    <span>คุณมีสิทธิ์ <strong>ดูและดาวน์โหลด</strong>เอกสารเท่านั้น การแก้ไขหรือลบสงวนไว้สำหรับผู้ดูแลระบบ</span>
+                    <span>คุณมีสิทธิ์ <strong>ดูและดาวน์โหลด</strong>เฉพาะเอกสารของตัวเอง การแก้ไขหรือลบสงวนไว้สำหรับผู้ดูแลระบบ</span>
                 </div>
             )}
 
@@ -285,7 +300,6 @@ export const DocumentsManagement = () => {
                                             </td>
                                             <td className="p-3">
                                                 <div className="flex gap-1">
-                                                    {/* ───── ดู (ทุก role) ───── */}
                                                     <Button
                                                         variant="ghost" size="icon"
                                                         className="h-7 w-7 text-blue-600" title="ดูรายละเอียด"
@@ -294,7 +308,6 @@ export const DocumentsManagement = () => {
                                                         <Eye className="w-3.5 h-3.5" />
                                                     </Button>
 
-                                                    {/* ───── ดาวน์โหลด (ทุก role) ───── */}
                                                     {doc.file_url && (
                                                         <Button
                                                             variant="ghost" size="icon"
@@ -305,7 +318,6 @@ export const DocumentsManagement = () => {
                                                         </Button>
                                                     )}
 
-                                                    {/* ───── แก้ไข + ลบ (admin only) ───── */}
                                                     {isAdmin && (
                                                         <>
                                                             <Button
@@ -335,9 +347,6 @@ export const DocumentsManagement = () => {
                 </CardContent>
             </Card>
 
-            {/* ─────────────────────────────────────────────────────────
-                View-Only Dialog (ทุก role)
-            ───────────────────────────────────────────────────────── */}
             <Dialog open={showViewDialog} onOpenChange={setShowViewDialog}>
                 <DialogContent className="max-w-lg">
                     <DialogHeader>
@@ -401,9 +410,6 @@ export const DocumentsManagement = () => {
                 </DialogContent>
             </Dialog>
 
-            {/* ─────────────────────────────────────────────────────────
-                Admin Edit/Add Dialog
-            ───────────────────────────────────────────────────────── */}
             {isAdmin && (
                 <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>
                     <DialogContent className="max-w-lg">
