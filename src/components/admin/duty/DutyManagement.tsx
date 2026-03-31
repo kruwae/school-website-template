@@ -732,7 +732,10 @@ export const DutyManagement = () => {
         if (!isCurrentUserAssignedDuty(assignment)) return false;
         if (!record) return true;
         if (record.status === 'approved' || record.status === 'recorded') return false;
-        return !record.swap_requested || record.swap_response_status === 'rejected';
+        if (record.swap_requested && record.swap_response_status === 'pending') {
+            return record.swap_requested_by_user_id === currentUserId || record.swap_target_user_id === currentUserId;
+        }
+        return !record.swap_requested || record.swap_response_status === 'rejected' || record.swap_response_status === 'accepted';
     };
 
     const canOpenSelfRecordActions = (assignment: DutyAssignment, record?: DutyRecord) => {
@@ -1083,6 +1086,8 @@ export const DutyManagement = () => {
         if (!canSeeDutyAssignment(assignment, record)) return null;
         const dutyExpired = isPastDutyDate(assignment.duty_date);
         const approvalFlow = getApprovalFlowState(assignment, record);
+        const isCurrentUserSwappedTarget = !!record?.swap_target_user_id && record.swap_target_user_id === currentUserId;
+        const isCurrentUserSwapRequester = !!record?.swap_requested_by_user_id && record.swap_requested_by_user_id === currentUserId;
 
         return (
             <Card key={assignment.id} className="border">
@@ -1151,7 +1156,9 @@ export const DutyManagement = () => {
                                     disabled={dutyExpired}
                                 >
                                     <RefreshCcw className="w-4 h-4" />
-                                    แลกเวร
+                                    {record?.swap_requested && record.swap_response_status === 'pending'
+                                        ? 'ดูคำขอเปลี่ยนเวร'
+                                        : 'แลกเวร'}
                                 </Button>
                             )}
 
@@ -1393,7 +1400,7 @@ export const DutyManagement = () => {
                                                     <div className="font-semibold">{item.assignment?.assigned_name || 'ไม่มีผู้รับเวร'}</div>
                                                     <div className="text-xs text-muted-foreground">{new Date(item.record.duty_date).toLocaleDateString('th-TH')} • {item.record.duty_shift_label}</div>
                                                 </div>
-                                                <Button size="xs" onClick={() => handleSubmitForApproval(item.record)}>
+                                                <Button size="sm" onClick={() => handleSubmitForApproval(item.record)}>
                                                     อนุมัติเวร
                                                 </Button>
                                             </div>
@@ -1806,6 +1813,7 @@ export const DutyManagement = () => {
                 <DialogContent className="max-w-lg">
                     <DialogHeader>
                         <DialogTitle>ตอบรับการเปลี่ยนเวร</DialogTitle>
+                    </DialogHeader>
                     <div className="space-y-4">
                         <div className="rounded-lg border bg-muted/20 p-3 space-y-1">
                             <p className="text-sm font-medium">
