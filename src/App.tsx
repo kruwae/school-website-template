@@ -19,6 +19,12 @@ import Curriculum from "./pages/Curriculum";
 import AcademicCalendar from "./pages/AcademicCalendar";
 import Enrollment from "./pages/Enrollment";
 import Events from "./pages/Events";
+import AcademicInfographic from "./pages/AcademicInfographic";
+import GeneralAffairsInfographic from "./pages/GeneralAffairsInfographic";
+import BudgetInfographic from "./pages/BudgetInfographic";
+import HRInfographic from "./pages/HRInfographic";
+import StudentAffairsInfographic from "./pages/StudentAffairsInfographic";
+import QuickMenuInfographic from "./pages/QuickMenuInfographic";
 
 const queryClient = new QueryClient();
 
@@ -41,6 +47,12 @@ const App = () => (
           <Route path="/calendar" element={<AcademicCalendar />} />
           <Route path="/enrollment" element={<Enrollment />} />
           <Route path="/events" element={<Events />} />
+          <Route path="/infographic/academic" element={<AcademicInfographic />} />
+          <Route path="/infographic/general-affairs" element={<GeneralAffairsInfographic />} />
+          <Route path="/infographic/budget" element={<BudgetInfographic />} />
+          <Route path="/infographic/hr" element={<HRInfographic />} />
+          <Route path="/infographic/student-affairs" element={<StudentAffairsInfographic />} />
+          <Route path="/infographic/quick-menu" element={<QuickMenuInfographic />} />
           <Route path="/admin" element={<AdminLogin />} />
           <Route path="/admin/dashboard" element={<AdminDashboard />} />
           <Route path="/portal/evaluatee" element={<EvaluateePortal />} />
@@ -52,4 +64,3 @@ const App = () => (
 );
 
 export default App;
-
