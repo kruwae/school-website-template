@@ -77,6 +77,18 @@ export const DepartmentDocuments = ({ deptCode, deptName, color }: Props) => {
         status: 'submitted', file_url: '', file_name: '', uploader_name: currentUserName, description: '',
     });
 
+    const categoryOptions = useMemo(() => {
+        const base = categories.slice();
+        if (!base.some(c => c.name === 'รายงานการปฏิบัติงาน')) {
+            base.unshift({
+                id: `special-work-report-${deptId || deptCode}`,
+                name: 'รายงานการปฏิบัติงาน',
+                department_id: deptId || '',
+            });
+        }
+        return base;
+    }, [categories, deptId, deptCode]);
+
     useEffect(() => { fetchDeptAndDocs(); }, [deptCode, filterYear, filterCat]);
 
     const fetchDeptAndDocs = async () => {
@@ -211,7 +223,7 @@ export const DepartmentDocuments = ({ deptCode, deptName, color }: Props) => {
                     <SelectTrigger className="w-48"><SelectValue placeholder="ทุกหมวด" /></SelectTrigger>
                     <SelectContent>
                         <SelectItem value="all">ทุกหมวด</SelectItem>
-                        {categories.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+                        {categoryOptions.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
                     </SelectContent>
                 </Select>
                 <Select value={filterYear} onValueChange={setFilterYear}>
@@ -294,7 +306,7 @@ export const DepartmentDocuments = ({ deptCode, deptName, color }: Props) => {
                                 <Select value={form.category_id} onValueChange={v => setForm(p => ({ ...p, category_id: v }))}>
                                     <SelectTrigger><SelectValue placeholder="เลือก" /></SelectTrigger>
                                     <SelectContent>
-                                        {categories.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+                                        {categoryOptions.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
                                     </SelectContent>
                                 </Select>
                             </div>
