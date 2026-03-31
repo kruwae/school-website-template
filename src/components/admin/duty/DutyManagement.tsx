@@ -241,6 +241,7 @@ export const DutyManagement = () => {
     const [recordPage, setRecordPage] = useState(1);
     const [recordPageSize, setRecordPageSize] = useState(10);
     const [expandedRecordId, setExpandedRecordId] = useState<string | null>(null);
+    const [selectedCalendarDate, setSelectedCalendarDate] = useState<string | null>(null);
 
     const matchesCalendarStatusFilter = (assignment: DutyAssignment, record?: DutyRecord) => {
         switch (calendarStatusFilter) {
@@ -392,6 +393,37 @@ export const DutyManagement = () => {
             return matchesCalendarStatusFilter(assignment, record);
         });
     }, [monthAssignments, recordByAssignmentId, calendarStatusFilter]);
+
+    const recordCalendarItemsByDate = useMemo(() => {
+        const map = new Map<string, DutyCalendarItem[]>();
+
+        filteredRecords.forEach(record => {
+            const assignment = assignments.find(a => a.id === record.assignment_id);
+            const key = record.duty_date;
+            const dutyName = record.final_duty_name || assignment?.assigned_name || record.recorder_name || 'ไม่ระบุ';
+            const statusLabel = record.status ? (STATUS_MAP[record.status] || record.status) : 'ไม่ระบุ';
+            const item: DutyCalendarItem = {
+                id: record.id || `${record.duty_date}-${record.duty_shift}`,
+                dutyDate: record.duty_date,
+                title: record.duty_shift_label || record.duty_shift || 'ไม่ระบุช่วง',
+                subtitle: assignment?.notes || record.remarks || undefined,
+                ownerName: assignment?.assigned_name || record.recorder_name || 'ไม่ระบุ',
+                finalDutyName: record.final_duty_name || assignment?.assigned_name || record.recorder_name || undefined,
+                finalDutyPosition: record.final_duty_position || assignment?.assigned_position || record.recorder_position || undefined,
+                statusLabel,
+                swapResponseStatus: record.swap_response_status || null,
+                approvalReady: !!record.approval_ready,
+                status: record.status || assignment?.status,
+                notes: record.incidents || record.actions_taken || undefined,
+            };
+
+            const items = map.get(key) || [];
+            items.push(item);
+            map.set(key, items);
+        });
+
+        return map;
+    }, [filteredRecords, assignments]);
 
     const paginatedRecords = useMemo(() => {
         if (recordViewMode === 'cards') {
@@ -1692,135 +1724,58 @@ export const DutyManagement = () => {
                     ) : filteredRecords.length === 0 ? (
                         <Card><CardContent className="p-8 text-center text-muted-foreground">ยังไม่มีบันทึกเวร</CardContent></Card>
                     ) : (
-                        <div className="space-y-3">
+                        <div className="space-y-4">
                             <div className="flex flex-wrap items-center justify-between gap-2">
-                                <div className="flex items-center gap-2 text-sm">
-                                    <span className="text-muted-foreground">โหมดการแสดง:</span>
-                                    <Button size="xs" variant={recordViewMode === 'compact' ? 'default' : 'outline'} onClick={() => { setRecordViewMode('compact'); setExpandedRecordId(null); }}>
-                                        สรุปตาราง
-                                    </Button>
-                                    <Button size="xs" variant={recordViewMode === 'cards' ? 'default' : 'outline'} onClick={() => { setRecordViewMode('cards'); setExpandedRecordId(null); }}>
-                                        รายการเต็ม
-                                    </Button>
+                                <div>
+                                    <h3 className="text-lg font-semibold">ปฏิทินบันทึกเวร</h3>
+                                    <p className="text-sm text-muted-foreground">คลิกวันที่ที่มีข้อมูล หรือคลิกชื่อในช่องเพื่อดูรายละเอียด workflow ของเวร</p>
                                 </div>
-                                {recordViewMode === 'compact' && (
-                                    <div className="text-sm text-muted-foreground">
-                                        แสดง {paginatedRecords.length}/{filteredRecords.length} รายการ (หน้าที่ {recordPage}/{totalRecordPages})
-                                    </div>
-                                )}
+                                <div className="flex items-center gap-2 text-sm">
+                                    <span className="text-muted-foreground">สถานะกรอง:</span>
+                                    <Button size="xs" variant={calendarStatusFilter === 'all' ? 'default' : 'outline'} onClick={() => setCalendarStatusFilter('all')}>ทั้งหมด</Button>
+                                    <Button size="xs" variant={calendarStatusFilter === 'approval_ready' ? 'default' : 'outline'} onClick={() => setCalendarStatusFilter('approval_ready')}>รออนุมัติ</Button>
+                                    <Button size="xs" variant={calendarStatusFilter === 'approved' ? 'default' : 'outline'} onClick={() => setCalendarStatusFilter('approved')}>อนุมัติแล้ว</Button>
+                                    <Button size="xs" variant={calendarStatusFilter === 'recorded' ? 'default' : 'outline'} onClick={() => setCalendarStatusFilter('recorded')}>บันทึกแล้ว</Button>
+                                </div>
                             </div>
 
-                            {recordViewMode === 'compact' ? (
-                                <div className="overflow-x-auto">
-                                    <table className="min-w-full text-sm border">
-                                        <thead>
-                                            <tr className="bg-slate-100">
-                                                <th className="px-3 py-2 text-left">วันที่</th>
-                                                <th className="px-3 py-2 text-left">ช่วง</th>
-                                                <th className="px-3 py-2 text-left">ผู้ปฏิบัติเวร</th>
-                                                <th className="px-3 py-2 text-left">สถานะ</th>
-                                                <th className="px-3 py-2 text-left">ขั้นตอน</th>
-                                                <th className="px-3 py-2 text-left">จัดการ</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            {paginatedRecords.map(record => {
-                                                const assignment = assignments.find(item => item.id === record.assignment_id);
-                                                const assignmentRow = assignment || {
-                                                    id: record.assignment_id || record.id,
-                                                    duty_date: record.duty_date,
-                                                    duty_shift: record.duty_shift,
-                                                    duty_shift_label: record.duty_shift_label,
-                                                    assigned_user_id: record.final_duty_user_id || null,
-                                                    assigned_name: record.final_duty_name || record.recorder_name,
-                                                    assigned_position: record.final_duty_position || record.recorder_position,
-                                                    status: 'scheduled',
-                                                } as DutyAssignment;
-
-                                                const flow = getApprovalFlowState(assignmentRow, record);
-                                                const doneSteps = flow.filter(step => step.done).length;
-                                                const activeStep = flow.find(step => step.active);
-                                                const progress = `${doneSteps}/${flow.length}`;
-
-                                                return (
-                                                    <>
-                                                        <tr key={record.id || `${record.duty_date}-${record.duty_shift}`} className="border-t">
-                                                            <td className="px-3 py-2">{new Date(record.duty_date).toLocaleDateString('th-TH')}</td>
-                                                            <td className="px-3 py-2">{record.duty_shift_label || record.duty_shift}</td>
-                                                            <td className="px-3 py-2">{assignmentRow.assigned_name || '-'} </td>
-                                                            <td className="px-3 py-2"><Badge variant="outline">{STATUS_MAP[record.status] || record.status}</Badge></td>
-                                                            <td className="px-3 py-2">
-                                                                <div>{progress}</div>
-                                                                <div className="text-xs text-muted-foreground">{activeStep?.label || 'ครบ'}</div>
-                                                            </td>
-                                                            <td className="px-3 py-2">
-                                                                <Button size="xs" variant="outline" onClick={() => setExpandedRecordId(expandedRecordId === (record.id || '') ? null : (record.id || ''))}>
-                                                                    {expandedRecordId === (record.id || '') ? 'ซ่อน' : 'ดู'}
-                                                                </Button>
-                                                            </td>
-                                                        </tr>
-                                                        {expandedRecordId === (record.id || '') && (
-                                                            <tr>
-                                                                <td colSpan={6} className="bg-slate-50 p-3">
-                                                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-2 text-xs text-muted-foreground">
-                                                                        <div>สลับ: {record.swap_requested ? record.swap_response_status : 'ไม่ใช่'}</div>
-                                                                        <div>อนุมัติพร้อม: {record.approval_ready ? 'ใช่' : 'ไม่ใช่'}</div>
-                                                                        <div>สุดท้าย: {record.final_duty_name || '-'}</div>
-                                                                    </div>
-                                                                    <div className="mt-2 text-xs">
-                                                                        เหตุการณ์: {record.incidents || '-'}
-                                                                    </div>
-                                                                    <div className="mt-2">
-                                                                        <div className="text-xs font-semibold">แผนภาพขั้นตอน:</div>
-                                                                        <div className="flex flex-wrap gap-1 mt-1">
-                                                                            {flow.map((s, idx) => (
-                                                                                <Badge key={idx} variant={s.done ? 'default' : s.active ? 'secondary' : 'outline'}>
-                                                                                    {s.label}
-                                                                                </Badge>
-                                                                            ))}
-                                                                        </div>
-                                                                    </div>
-                                                                </td>
-                                                            </tr>
-                                                        )}
-                                                    </>
-                                                );
-                                            })}
-                                        </tbody>
-                                    </table>
+                            <div className="rounded-2xl border bg-background p-3">
+                                <div className="grid grid-cols-7 gap-2 text-center text-xs font-medium text-muted-foreground mb-2">
+                                    {['อา', 'จ', 'อ', 'พ', 'พฤ', 'ศ', 'ส'].map(day => (
+                                        <div key={day} className="py-2">{day}</div>
+                                    ))}
                                 </div>
-                            ) : (
-                                <div className="space-y-4">
-                                    {paginatedRecords.map(record => {
-                                        const assignment = assignments.find(item => item.id === record.assignment_id);
-                                        const fallbackAssignment: DutyAssignment | undefined = assignment;
-                                        return renderAssignmentCard(
-                                            fallbackAssignment || {
-                                                id: record.assignment_id || record.id,
-                                                duty_date: record.duty_date,
-                                                duty_shift: record.duty_shift,
-                                                duty_shift_label: record.duty_shift_label,
-                                                assigned_user_id: record.final_duty_user_id || null,
-                                                assigned_name: record.final_duty_name || record.recorder_name,
-                                                assigned_position: record.final_duty_position || record.recorder_position,
-                                                status: 'scheduled',
-                                            } as DutyAssignment
+                                <div className="grid grid-cols-7 gap-2">
+                                    {calendarDays.map(date => {
+                                        const key = date.toISOString().split('T')[0];
+                                        const items = recordCalendarItemsByDate.get(key) || [];
+                                        const isCurrentMonth = key.startsWith(filterMonth);
+                                        const isToday = key === new Date().toISOString().split('T')[0];
+                                        return (
+                                            <DutyCalendarCell
+                                                key={key}
+                                                dateLabel={formatThaiShortDate(date)}
+                                                dayNumber={formatThaiDay(date)}
+                                                isCurrentMonth={isCurrentMonth}
+                                                isToday={isToday}
+                                                items={items}
+                                                onClick={() => {
+                                                    if (items.length) {
+                                                        setSelectedCalendarDate(key);
+                                                        setSelectedCalendarItem(null);
+                                                        setShowCalendarItemDialog(true);
+                                                    }
+                                                }}
+                                                onItemClick={item => {
+                                                    setSelectedCalendarItem(item);
+                                                    setSelectedCalendarDate(null);
+                                                    setShowCalendarItemDialog(true);
+                                                }}
+                                            />
                                         );
                                     })}
                                 </div>
-                            )}
-
-                            {recordViewMode === 'compact' && (
-                                <div className="flex items-center justify-between py-2">
-                                    <Button size="xs" variant="outline" disabled={recordPage <= 1} onClick={() => setRecordPage(prev => Math.max(prev - 1, 1))}>
-                                        ก่อนหน้า
-                                    </Button>
-                                    <div className="text-sm text-muted-foreground">หน้า {recordPage} / {totalRecordPages}</div>
-                                    <Button size="xs" variant="outline" disabled={recordPage >= totalRecordPages} onClick={() => setRecordPage(prev => Math.min(prev + 1, totalRecordPages))}>
-                                        ถัดไป
-                                    </Button>
-                                </div>
-                            )}
+                            </div>
                         </div>
                     )}
                 </TabsContent>
@@ -2100,8 +2055,54 @@ export const DutyManagement = () => {
             <Dialog open={showCalendarItemDialog} onOpenChange={(open) => !open && setShowCalendarItemDialog(false)}>
                 <DialogContent className="max-w-lg">
                     <DialogHeader>
-                        <DialogTitle>รายละเอียดกำหนดเวร</DialogTitle>
+                        <DialogTitle>
+                            {selectedCalendarItem
+                                ? 'รายละเอียดกำหนดเวร'
+                                : selectedCalendarDate
+                                    ? `รายการบันทึกเวรของวันที่ ${new Date(selectedCalendarDate).toLocaleDateString('th-TH')}`
+                                    : 'รายละเอียดกำหนดเวร'}
+                        </DialogTitle>
                     </DialogHeader>
+
+                    {selectedCalendarDate && (
+                        <div className="space-y-3">
+                            {(recordCalendarItemsByDate.get(selectedCalendarDate) || []).map(item => {
+                                const record = filteredRecords.find(r => r.id === item.id);
+                                const assignment = record ? assignments.find(a => a.id === record.assignment_id) : undefined;
+                                const flow = assignment ? getApprovalFlowState(assignment, record) : [];
+
+                                return (
+                                    <div key={item.id} className="rounded-lg border bg-muted/20 p-3">
+                                        <div className="flex items-center justify-between gap-2">
+                                            <div>
+                                                <p className="text-sm font-medium">{item.title} • {item.ownerName}</p>
+                                                <p className="text-xs text-muted-foreground">{item.statusLabel} • {item.subtitle || 'ไม่มีหมายเหตุ'}</p>
+                                            </div>
+                                            <Button size="xs" variant="outline" onClick={() => {
+                                                setSelectedCalendarItem(item);
+                                                setSelectedCalendarDate(null);
+                                            }}>
+                                                ดูรายละเอียด
+                                            </Button>
+                                        </div>
+
+                                        <div className="mt-2 flex flex-wrap gap-1">
+                                            {flow.map((step, idx) => (
+                                                <Badge key={idx} variant={step.done ? 'default' : step.active ? 'secondary' : 'outline'}>
+                                                    {step.label}
+                                                </Badge>
+                                            ))}
+                                        </div>
+                                    </div>
+                                );
+                            })}
+
+                            {(recordCalendarItemsByDate.get(selectedCalendarDate) || []).length === 0 && (
+                                <div className="rounded-lg border border-muted/50 bg-muted/10 p-3 text-sm text-muted-foreground">ไม่มีบันทึกสำหรับวันที่นี้</div>
+                            )}
+                        </div>
+                    )}
+
                     {selectedCalendarItem && (
                         <div className="space-y-3">
                             <div className="rounded-lg border bg-muted/20 p-3">
@@ -2117,8 +2118,15 @@ export const DutyManagement = () => {
                             </div>
                         </div>
                     )}
+
                     <DialogFooter>
-                        <Button variant="outline" onClick={() => setShowCalendarItemDialog(false)}>ปิด</Button>
+                        <Button variant="outline" onClick={() => {
+                            setShowCalendarItemDialog(false);
+                            setSelectedCalendarItem(null);
+                            setSelectedCalendarDate(null);
+                        }}>
+                            ปิด
+                        </Button>
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
