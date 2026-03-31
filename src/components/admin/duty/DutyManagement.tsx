@@ -280,14 +280,29 @@ export const DutyManagement = () => {
     }, [records]);
 
     const isCurrentUserAssignedDuty = (assignment: DutyAssignment) => {
-        return assignment.assigned_user_id
-            ? assignment.assigned_user_id === currentUserId
-            : assignment.assigned_name === currentUserName;
+        if (!currentUserId) return false;
+
+        if (assignment.assigned_user_id) {
+            return assignment.assigned_user_id.toLowerCase() === currentUserId.toLowerCase();
+        }
+
+        return (
+            assignment.assigned_name?.trim().toLowerCase() === currentUserName?.trim().toLowerCase()
+        );
     };
 
     const isCurrentUserFinalDuty = (record?: DutyRecord) => {
-        if (!record?.final_duty_user_id) return false;
-        return record.final_duty_user_id === currentUserId;
+        if (!record) return false;
+
+        if (record.final_duty_user_id) {
+            return record.final_duty_user_id.toLowerCase() === currentUserId.toLowerCase();
+        }
+
+        if (record.final_duty_name) {
+            return record.final_duty_name.trim().toLowerCase() === currentUserName?.trim().toLowerCase();
+        }
+
+        return false;
     };
 
     const isCurrentUserSwapRelated = (record?: DutyRecord) => {
