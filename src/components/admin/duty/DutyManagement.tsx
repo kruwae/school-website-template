@@ -85,7 +85,6 @@ const SHIFT_MAP: Record<string, string> = {
 
 const STATUS_MAP: Record<string, string> = {
     verified: 'ตกลง/แลกเวรแล้ว',
-    pending_approval: 'รออนุมัติจากหัวหน้ากิจการ',
     approved: 'อนุมัติแล้ว',
     recorded: 'บันทึกเวรแล้ว',
 };
@@ -364,7 +363,7 @@ export const DutyManagement = () => {
     const pendingApprovalItems = useMemo(() => {
         if (!isScheduleManager && !canManageReports) return [];
         return (records || [])
-            .filter(record => record.status === 'pending_approval' && (!record.swap_requested || record.swap_response_status === 'accepted'))
+            .filter(record => record.status === 'verified' && record.approval_ready === true && (!record.swap_requested || record.swap_response_status === 'accepted'))
             .map(record => {
                 const assignment = assignments.find(a => a.id === record.assignment_id);
                 return { record, assignment };
@@ -401,7 +400,7 @@ export const DutyManagement = () => {
 
     const pendingApprovalCount = useMemo(() => {
         if (!isScheduleManager && !canManageReports) return 0;
-        return records.filter(record => record.status === 'pending_approval').length;
+        return records.filter(record => record.status === 'verified' && record.approval_ready === true).length;
     }, [records, isScheduleManager, canManageReports]);
 
     const selectableStaff = useMemo(() => {
@@ -757,14 +756,13 @@ export const DutyManagement = () => {
     const canSubmitForApproval = (record: DutyRecord, assignment?: DutyAssignment) => {
         if (!assignment || isPastDutyDate(assignment.duty_date)) return false;
         const isUserOwnerOrFinal = isCurrentUserAssignedDuty(assignment) || isCurrentUserFinalDuty(record);
-        const isUserManager = isScheduleManager || canManageReports;
 
-        // ผู้ส่งขออนุมัติต้องเป็นเจ้าของเวร/ผู้ปฏิบัติสุดท้าย ไม่ใช่หัวหน้าระบบ
-        if (!isUserOwnerOrFinal || isUserManager) return false;
+        if (!isUserOwnerOrFinal) return false;
         if (record.swap_requested && record.swap_requested_by_user_id && record.swap_requested_by_user_id !== currentUserId) return false;
         if (record.status !== 'verified') return false;
         if (record.swap_requested && record.swap_response_status !== 'accepted') return false;
-        return !!record.approval_ready;
+        if (record.approval_ready) return false; // already requested
+        return true;
     };
 
     const handleConfirmNoSwap = async (assignment: DutyAssignment) => {
@@ -793,7 +791,7 @@ export const DutyManagement = () => {
                         final_duty_user_id: currentUserId || assignment.assigned_user_id || null,
                         final_duty_name: currentUserName || assignment.assigned_name,
                         final_duty_position: currentUserPosition || assignment.assigned_position || '',
-                        approval_ready: true,
+                        approval_ready: false,
                         status: 'verified',
                     })
                     .eq('id', existingRecord.id);
@@ -811,7 +809,7 @@ export const DutyManagement = () => {
                     final_duty_user_id: currentUserId || assignment.assigned_user_id || null,
                     final_duty_name: currentUserName || assignment.assigned_name,
                     final_duty_position: currentUserPosition || assignment.assigned_position || '',
-                    approval_ready: true,
+                    approval_ready: false,
                     status: 'verified',
                 };
 
@@ -918,7 +916,7 @@ export const DutyManagement = () => {
                 final_duty_user_id: currentUserId || null,
                 final_duty_name: currentUserName,
                 final_duty_position: currentUserPosition,
-                approval_ready: true,
+                approval_ready: false,
             }
             : {
                 swap_response_status: 'rejected',
@@ -954,7 +952,7 @@ export const DutyManagement = () => {
         }
 
         const { error } = await (supabase.from('duty_records' as any) as any)
-            .update({ status: 'pending_approval' })
+            .update({ approval_ready: true })
             .eq('id', record.id);
 
         if (error) {
@@ -968,7 +966,7 @@ export const DutyManagement = () => {
 
     const canManageApproval = (record: DutyRecord) => {
         if (!record) return false;
-        return (isScheduleManager || canManageReports) && record.status === 'pending_approval';
+        return (isScheduleManager || canManageReports) && record.status === 'verified' && record.approval_ready === true;
     };
 
     const handleApproveRecord = async (record: DutyRecord) => {
@@ -1018,7 +1016,7 @@ export const DutyManagement = () => {
 
         const hasAcceptedSwap = record?.swap_requested && record?.swap_response_status === 'accepted';
         const finalDutyResolved = !!record?.final_duty_name;
-        const pendingApproval = record?.status === 'pending_approval';
+        const pendingApproval = record?.status === 'verified' && record?.approval_ready === true;
         const submittedForApproval = record?.status === 'approved' || record?.status === 'recorded';
         const canRecordNow = !!record && canOpenRecordDialog(assignment, record);
 
@@ -1237,7 +1235,7 @@ export const DutyManagement = () => {
                                         </Button>
                                     )}
 
-                                    {(isScheduleManager || canManageReports) && record.status === 'pending_approval' && (
+                                    {canManageApproval(record) && (
                                         <>
                                             <Button size="sm" onClick={() => handleApproveRecord(record)} className="gap-2">
                                                 <CheckCheck className="w-4 h-4" />
@@ -1260,7 +1258,7 @@ export const DutyManagement = () => {
                                 <div className="rounded-xl border bg-background p-3">
                                     <div className="flex items-center justify-between gap-3 mb-3">
                                         <p className="text-sm font-semibold">สถานะการดำเนินงาน</p>
-                                        <Badge variant="outline">{STATUS_MAP[record.status] || record.status}</Badge>
+                                        <Badge variant="outline">{record.status === 'verified' && record.approval_ready ? 'รออนุมัติจากหัวหน้ากิจการ' : (STATUS_MAP[record.status] || record.status)}</Badge>
                                     </div>
                                     <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
                                         {approvalFlow.map((step, index) => (
@@ -1330,8 +1328,8 @@ export const DutyManagement = () => {
                                     <p className="text-xs text-emerald-700 mt-2">
                                         {record.status === 'approved'
                                             ? 'อนุมัติแล้ว ผู้ปฏิบัติเวรสุดท้ายเท่านั้นที่จะเห็นปุ่มบันทึกเวร'
-                                            : record.status === 'pending_approval'
-                                                ? 'ส่งคำขออนุมัติแล้ว รอหัวหน้ากิจการอนุมัติ'
+                                            : record.status === 'verified' && record.approval_ready
+                                                ? 'ส่งคำขออนุมัติแล้ว รอหัวหน้ากิจการให้การอนุมัติ'
                                                 : record.status === 'verified'
                                                     ? 'พร้อมส่งคำขออนุมัติ โดยเจ้าของเวรหรือผู้ปฏิบัติสุดท้าย'
                                                     : 'กรณีแลกเวร ต้องให้ผู้รับเวรตอบตกลงก่อน ระบบจะแสดงผู้รับเวรและผู้ปฏิบัติเวรสุดท้ายให้ชัดเจน แล้วจึงส่งอนุมัติตามลำดับ'}
