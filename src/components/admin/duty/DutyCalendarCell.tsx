@@ -4,6 +4,7 @@ import { cn } from '@/lib/utils';
 
 export interface DutyCalendarItem {
     id: string;
+    dutyDate: string;
     title: string;
     subtitle?: string;
     ownerName: string;
@@ -23,6 +24,7 @@ interface DutyCalendarCellProps {
     isToday: boolean;
     items: DutyCalendarItem[];
     onClick?: () => void;
+    onItemClick?: (item: DutyCalendarItem) => void;
 }
 
 const getItemTone = (item: DutyCalendarItem) => {
@@ -59,13 +61,21 @@ export const DutyCalendarCell = ({ dateLabel, dayNumber, isCurrentMonth, isToday
                     const responsibilityLabel = item.finalDutyName ? `ผู้ปฏิบัติเวร: ${item.finalDutyName}` : `เจ้าของเวร: ${item.ownerName}`;
 
                     return (
-                        <div key={item.id} className={cn('rounded-lg border px-2 py-1.5 text-xs shadow-sm', getItemTone(item))}>
+                        <button
+                            key={item.id}
+                            type="button"
+                            className={cn('w-full text-left rounded-lg border px-2 py-1.5 text-xs shadow-sm', getItemTone(item))}
+                            onClick={e => {
+                                e.stopPropagation();
+                                onItemClick?.(item);
+                            }}
+                        >
                             <div className="flex flex-col gap-0.5">
                                 <div className="font-semibold truncate">{dutyName}</div>
                                 <div className="text-[10px] opacity-80">{responsibilityLabel}</div>
                             </div>
                             <div className="mt-1 text-[10px] font-medium text-right opacity-80">{item.statusLabel}</div>
-                        </div>
+                        </button>
                     );
                 })}
                 {items.length > 4 && <div className="text-[11px] text-muted-foreground">+{items.length - 4} รายการเพิ่มเติม</div>}

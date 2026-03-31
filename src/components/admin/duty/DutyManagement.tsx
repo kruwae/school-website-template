@@ -230,6 +230,9 @@ export const DutyManagement = () => {
     const [recordForm, setRecordForm] = useState<any>(null);
     const [swapDialogRecord, setSwapDialogRecord] = useState<DutyRecord | null>(null);
     const [uploadingImages, setUploadingImages] = useState(false);
+
+    const [showCalendarItemDialog, setShowCalendarItemDialog] = useState(false);
+    const [selectedCalendarItem, setSelectedCalendarItem] = useState<DutyCalendarItem | null>(null);
     const imageInputRef = useRef<HTMLInputElement>(null);
     const [swapTargetUserId, setSwapTargetUserId] = useState('');
     const [swapRequestNote, setSwapRequestNote] = useState('');
@@ -367,6 +370,7 @@ export const DutyManagement = () => {
             const items = map.get(key) || [];
             items.push({
                 id: assignment.id,
+                dutyDate: assignment.duty_date,
                 title: assignment.duty_shift_label || SHIFT_MAP[assignment.duty_shift] || assignment.duty_shift,
                 subtitle: assignment.notes || undefined,
                 ownerName: assignment.assigned_name,
@@ -737,8 +741,11 @@ export const DutyManagement = () => {
 
     const canSubmitForApproval = (record: DutyRecord, assignment?: DutyAssignment) => {
         if (!assignment || isPastDutyDate(assignment.duty_date)) return false;
-        if (!isCurrentUserAssignedDuty(assignment) && !isCurrentUserFinalDuty(record)) return false;
-        if (record.swap_requested && record.swap_requested_by_user_id && record.swap_requested_by_user_id !== currentUserId) return false;
+        const isUserOwnerOrFinal = isCurrentUserAssignedDuty(assignment) || isCurrentUserFinalDuty(record);
+        const isUserManager = isScheduleManager || canManageReports;
+
+        if (!isUserOwnerOrFinal && !isUserManager) return false;
+        if (record.swap_requested && record.swap_requested_by_user_id && record.swap_requested_by_user_id !== currentUserId && !isUserManager) return false;
         if (record.status !== 'verified') return false;
         if (record.swap_requested && record.swap_response_status !== 'accepted') return false;
         return !!record.approval_ready;
@@ -1152,15 +1159,15 @@ export const DutyManagement = () => {
                                         </Button>
                                     )}
 
-                                    {canOpenSelfRecordActions(assignment, record) && (
-                                        <>
-                                            {canRespondSwap(record, assignment) && (
-                                                <Button variant="secondary" size="sm" className="gap-2" onClick={() => openRespondDialog(record)}>
-                                                    <CheckCheck className="w-4 h-4" />
-                                                    ตอบรับเปลี่ยนเวร
-                                                </Button>
-                                            )}
+                                    {canRespondSwap(record, assignment) && (
+                                        <Button variant="secondary" size="sm" className="gap-2" onClick={() => openRespondDialog(record)}>
+                                            <CheckCheck className="w-4 h-4" />
+                                            ตอบรับเปลี่ยนเวร
+                                        </Button>
+                                    )}
 
+                                    {(canOpenSelfRecordActions(assignment, record) || isScheduleManager || canManageReports) && (
+                                        <>
                                             {canSubmitForApproval(record, assignment) && (
                                                 <Button size="sm" className="gap-2" onClick={() => handleSubmitForApproval(record)}>
                                                     <Send className="w-4 h-4" />
@@ -1369,6 +1376,11 @@ export const DutyManagement = () => {
                                 <Card><CardContent className="p-8 text-center text-muted-foreground">กำลังโหลด...</CardContent></Card>
                             ) : (
                                 <div className="rounded-2xl border bg-background p-3">
+                                    <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 mb-4 text-sm text-blue-900">
+                                        <p className="font-semibold">สถานะการดำเนินงานรวม</p>
+                                        <p className="mb-1">1. กำหนดเวรแล้ว 2. รอการตกลง / แลกเวร 3. รออนุมัติ 4. บันทึกเวร</p>
+                                        <p>เจ้าของเวรหรือผู้รับเวรสุดท้ายจะแสดงในปฏิทิน (คลิกเวรเพื่อดูรายละเอียด)</p>
+                                    </div>
                                     <div className="grid grid-cols-7 gap-2 text-center text-xs font-medium text-muted-foreground mb-2">
                                         {['อา', 'จ', 'อ', 'พ', 'พฤ', 'ศ', 'ส'].map(day => (
                                             <div key={day} className="py-2">{day}</div>
@@ -1388,6 +1400,10 @@ export const DutyManagement = () => {
                                                     isCurrentMonth={isCurrentMonth}
                                                     isToday={isToday}
                                                     items={items}
+                                                    onItemClick={item => {
+                                                        setSelectedCalendarItem(item);
+                                                        setShowCalendarItemDialog(true);
+                                                    }}
                                                 />
                                             );
                                         })}
@@ -1729,11 +1745,36 @@ export const DutyManagement = () => {
                 </DialogContent>
             </Dialog>
 
+            <Dialog open={showCalendarItemDialog} onOpenChange={(open) => !open && setShowCalendarItemDialog(false)}>
+                <DialogContent className="max-w-lg">
+                    <DialogHeader>
+                        <DialogTitle>รายละเอียดกำหนดเวร</DialogTitle>
+                    </DialogHeader>
+                    {selectedCalendarItem && (
+                        <div className="space-y-3">
+                            <div className="rounded-lg border bg-muted/20 p-3">
+                                <p className="text-sm font-medium">วันที่ {new Date(selectedCalendarItem.dutyDate).toLocaleDateString('th-TH')} • {selectedCalendarItem.title}</p>
+                                <p className="text-xs text-muted-foreground mt-1">{selectedCalendarItem.subtitle || 'ไม่มีหมายเหตุ'}</p>
+                            </div>
+                            <div className="grid gap-2">
+                                <div className="text-sm"><strong>ผู้เข้าเวร:</strong> {selectedCalendarItem.ownerName}</div>
+                                <div className="text-sm"><strong>ผู้ปฏิบัติเวร:</strong> {selectedCalendarItem.finalDutyName || selectedCalendarItem.ownerName}</div>
+                                <div className="text-sm"><strong>สถานะ:</strong> {selectedCalendarItem.statusLabel}</div>
+                                <div className="text-sm"><strong>ค่าความพร้อมอนุมัติ:</strong> {selectedCalendarItem.approvalReady ? 'พร้อม' : 'ยังไม่พร้อม'}</div>
+                                <div className="text-sm"><strong>สถานะเปลี่ยนเวร:</strong> {SWAP_STATUS_MAP[selectedCalendarItem.swapResponseStatus || 'not_required'] || selectedCalendarItem.swapResponseStatus}</div>
+                            </div>
+                        </div>
+                    )}
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setShowCalendarItemDialog(false)}>ปิด</Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
             <Dialog open={!!respondDialogRecord} onOpenChange={(open) => !open && setRespondDialogRecord(null)}>
                 <DialogContent className="max-w-lg">
                     <DialogHeader>
                         <DialogTitle>ตอบรับการเปลี่ยนเวร</DialogTitle>
-                    </DialogHeader>
                     <div className="space-y-4">
                         <div className="rounded-lg border bg-muted/20 p-3 space-y-1">
                             <p className="text-sm font-medium">
