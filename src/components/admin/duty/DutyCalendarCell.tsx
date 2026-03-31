@@ -54,19 +54,17 @@ export const DutyCalendarCell = ({ dateLabel, dayNumber, isCurrentMonth, isToday
             </div>
 
             <div className="mt-2 space-y-2">
-                {items.slice(0, 4).map(item => (
-                    <div key={item.id} className={cn('rounded-lg border px-2 py-1.5 text-xs shadow-sm', getItemTone(item))}>
-                        <div className="flex items-center justify-between gap-2">
-                            <span className="font-semibold truncate">{item.title}</span>
-                            <span className="shrink-0">{item.statusLabel}</span>
+                {items.slice(0, 4).map(item => {
+                    const displayedName = item.finalDutyName || item.ownerName;
+                    return (
+                        <div key={item.id} className={cn('rounded-lg border px-2 py-1.5 text-xs shadow-sm', getItemTone(item))}>
+                            <div className="flex items-center justify-between gap-2">
+                                <span className="min-w-0 flex-1 truncate font-semibold">{displayedName}</span>
+                                <span className="shrink-0 text-[10px] font-medium leading-none opacity-80">{item.statusLabel}</span>
+                            </div>
                         </div>
-                        <div className="mt-1 space-y-0.5">
-                            <p className="truncate">ผู้เข้าเวร: {item.ownerName}</p>
-                            <p className="truncate">ผู้ปฏิบัติสุดท้าย: {item.finalDutyName || item.ownerName}</p>
-                            {item.finalDutyPosition && <p className="truncate text-[11px] opacity-80">{item.finalDutyPosition}</p>}
-                        </div>
-                    </div>
-                ))}
+                    );
+                })}
                 {items.length > 4 && <div className="text-[11px] text-muted-foreground">+{items.length - 4} รายการเพิ่มเติม</div>}
             </div>
         </Card>
