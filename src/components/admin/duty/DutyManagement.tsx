@@ -480,6 +480,10 @@ export const DutyManagement = () => {
         return records.filter(record => record.status === 'verified' && record.approval_ready === true).length;
     }, [records, isScheduleManager, canManageReports]);
 
+    const selectedCalendarDateItems = selectedCalendarDate
+        ? ((activeTab === 'records' ? recordCalendarItemsByDate : calendarItemsByDate).get(selectedCalendarDate) || [])
+        : [];
+
     const dutyStatusOverview = useMemo(() => {
         const overview = {
             assignmentsScheduled: 0,
@@ -1672,8 +1676,16 @@ export const DutyManagement = () => {
                                                     isCurrentMonth={isCurrentMonth}
                                                     isToday={isToday}
                                                     items={items}
+                                                    onClick={() => {
+                                                        if (items.length) {
+                                                            setSelectedCalendarDate(key);
+                                                            setSelectedCalendarItem(null);
+                                                            setShowCalendarItemDialog(true);
+                                                        }
+                                                    }}
                                                     onItemClick={item => {
                                                         setSelectedCalendarItem(item);
+                                                        setSelectedCalendarDate(null);
                                                         setShowCalendarItemDialog(true);
                                                     }}
                                                 />
@@ -1684,28 +1696,7 @@ export const DutyManagement = () => {
                             )}
                         </div>
 
-                        <div className="space-y-4">
-                            <div>
-                                <h2 className="text-lg font-semibold">รายการกำหนดเข้าเวรทั้งหมด</h2>
-                                <p className="text-sm text-muted-foreground">ใช้สำหรับตรวจสอบรายการแบบละเอียดและจัดการ CRUD ได้ตามสิทธิ์</p>
-                            </div>
 
-                            {!isScheduleManager ? (
-                                loading ? (
-                                    <Card><CardContent className="p-8 text-center text-muted-foreground">กำลังโหลด...</CardContent></Card>
-                                ) : myAssignments.length === 0 ? (
-                                    <Card><CardContent className="p-8 text-center text-muted-foreground">ยังไม่มีรายการกำหนดเข้าเวรของคุณ</CardContent></Card>
-                                ) : (
-                                    myAssignments.map(item => renderAssignmentCard(item, true))
-                                )
-                            ) : loading ? (
-                                <Card><CardContent className="p-8 text-center text-muted-foreground">กำลังโหลด...</CardContent></Card>
-                            ) : filteredAssignments.length === 0 ? (
-                                <Card><CardContent className="p-8 text-center text-muted-foreground">ยังไม่มีรายการกำหนดเข้าเวร</CardContent></Card>
-                            ) : (
-                                filteredAssignments.map(item => renderAssignmentCard(item))
-                            )}
-                        </div>
                     </div>
                 </TabsContent>
 
@@ -2066,7 +2057,7 @@ export const DutyManagement = () => {
 
                     {selectedCalendarDate && (
                         <div className="space-y-3">
-                            {(recordCalendarItemsByDate.get(selectedCalendarDate) || []).map(item => {
+                            {selectedCalendarDateItems.map(item => {
                                 const record = filteredRecords.find(r => r.id === item.id);
                                 const assignment = record ? assignments.find(a => a.id === record.assignment_id) : undefined;
                                 const flow = assignment ? getApprovalFlowState(assignment, record) : [];
@@ -2097,8 +2088,8 @@ export const DutyManagement = () => {
                                 );
                             })}
 
-                            {(recordCalendarItemsByDate.get(selectedCalendarDate) || []).length === 0 && (
-                                <div className="rounded-lg border border-muted/50 bg-muted/10 p-3 text-sm text-muted-foreground">ไม่มีบันทึกสำหรับวันที่นี้</div>
+                            {selectedCalendarDateItems.length === 0 && (
+                                <div className="rounded-lg border border-muted/50 bg-muted/10 p-3 text-sm text-muted-foreground">ไม่มีรายการสำหรับวันที่นี้</div>
                             )}
                         </div>
                     )}
