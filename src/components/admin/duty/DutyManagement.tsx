@@ -301,6 +301,9 @@ export const DutyManagement = () => {
             isCurrentUserAssignedDuty(assignment) ||
             isCurrentUserFinalDuty(record) ||
             isCurrentUserSwapRelated(record) ||
+            record?.swap_requested_by_user_id === currentUserId ||
+            record?.swap_target_user_id === currentUserId ||
+            record?.status === 'verified' ||
             record?.status === 'approved' ||
             record?.status === 'recorded'
         );
@@ -693,6 +696,13 @@ export const DutyManagement = () => {
         if (!record) return true;
         if (record.status === 'approved' || record.status === 'recorded') return false;
         return !record.swap_requested || record.swap_response_status === 'rejected';
+    };
+
+    const canOpenSelfRecordActions = (assignment: DutyAssignment, record?: DutyRecord) => {
+        if (isPastDutyDate(assignment.duty_date)) return false;
+        if (!record) return false;
+        if (!isCurrentUserAssignedDuty(assignment) && !isCurrentUserFinalDuty(record)) return false;
+        return record.status === 'verified' || record.status === 'approved' || record.status === 'recorded';
     };
 
     const canRespondSwap = (record: DutyRecord, assignment?: DutyAssignment) => {
@@ -1120,18 +1130,22 @@ export const DutyManagement = () => {
                                         </Button>
                                     )}
 
-                                    {canRespondSwap(record, assignment) && (
-                                        <Button variant="secondary" size="sm" className="gap-2" onClick={() => openRespondDialog(record)}>
-                                            <CheckCheck className="w-4 h-4" />
-                                            ตอบรับเปลี่ยนเวร
-                                        </Button>
-                                    )}
+                                    {canOpenSelfRecordActions(assignment, record) && (
+                                        <>
+                                            {canRespondSwap(record, assignment) && (
+                                                <Button variant="secondary" size="sm" className="gap-2" onClick={() => openRespondDialog(record)}>
+                                                    <CheckCheck className="w-4 h-4" />
+                                                    ตอบรับเปลี่ยนเวร
+                                                </Button>
+                                            )}
 
-                                    {canSubmitForApproval(record, assignment) && (
-                                        <Button size="sm" className="gap-2" onClick={() => handleSubmitForApproval(record)}>
-                                            <Send className="w-4 h-4" />
-                                            ส่งอนุมัติ
-                                        </Button>
+                                            {canSubmitForApproval(record, assignment) && (
+                                                <Button size="sm" className="gap-2" onClick={() => handleSubmitForApproval(record)}>
+                                                    <Send className="w-4 h-4" />
+                                                    ส่งอนุมัติ
+                                                </Button>
+                                            )}
+                                        </>
                                     )}
                                 </>
                             )}
