@@ -212,9 +212,10 @@ export const DutyManagement = () => {
     const currentUserPositionText = String(currentUserPosition || '').toLowerCase();
     const canSelfSchedule = !!currentUserId;
     const isScheduleManager =
-        ['admin', 'director', 'deputy_director'].includes(role || '') ||
+        ['admin', 'director', 'deputy_director', 'dept_head'].includes(role || '') ||
         isHeadManagerPosition(currentUserPositionText);
-    const canManageReports = ['admin', 'dept_head'].includes(role || '');
+    const canManageReports = ['admin', 'dept_head', 'director', 'deputy_director'].includes(role || '') ||
+        isHeadManagerPosition(currentUserPositionText);
 
     const [activeTab, setActiveTab] = useState('assignments');
     const [loading, setLoading] = useState(true);
@@ -278,22 +279,57 @@ export const DutyManagement = () => {
         return map;
     }, [records]);
 
+    const isCurrentUserAssignedDuty = (assignment: DutyAssignment) => {
+        return assignment.assigned_user_id
+            ? assignment.assigned_user_id === currentUserId
+            : assignment.assigned_name === currentUserName;
+    };
+
+    const isCurrentUserFinalDuty = (record?: DutyRecord) => {
+        if (!record?.final_duty_user_id) return false;
+        return record.final_duty_user_id === currentUserId;
+    };
+
+    const isCurrentUserSwapRelated = (record?: DutyRecord) => {
+        if (!record) return false;
+        return record.swap_requested_by_user_id === currentUserId || record.swap_target_user_id === currentUserId;
+    };
+
+    const canSeeDutyAssignment = (assignment: DutyAssignment, record?: DutyRecord) => {
+        if (isScheduleManager || canManageReports) return true;
+        return (
+            isCurrentUserAssignedDuty(assignment) ||
+            isCurrentUserFinalDuty(record) ||
+            isCurrentUserSwapRelated(record)
+        );
+    };
+
     const myAssignments = useMemo(() => {
         return assignments.filter(item => {
-            const matchOwner = item.assigned_user_id
-                ? item.assigned_user_id === currentUserId
-                : item.assigned_name === currentUserName;
-            return matchOwner && item.status !== 'cancelled';
+            const relatedRecord = recordByAssignmentId.get(item.id);
+            return canSeeDutyAssignment(item, relatedRecord) && item.status !== 'cancelled';
         });
-    }, [assignments, currentUserId, currentUserName]);
+    }, [assignments, recordByAssignmentId, currentUserId, currentUserName, isScheduleManager, canManageReports]);
 
     const filteredAssignments = useMemo(() => {
-        return assignments.filter(item => !filterMonth || item.duty_date.startsWith(filterMonth));
-    }, [assignments, filterMonth]);
+        return assignments.filter(item => {
+            const record = recordByAssignmentId.get(item.id);
+            return (!filterMonth || item.duty_date.startsWith(filterMonth)) && canSeeDutyAssignment(item, record);
+        });
+    }, [assignments, filterMonth, recordByAssignmentId, currentUserId, currentUserName, isScheduleManager, canManageReports]);
 
     const filteredRecords = useMemo(() => {
-        return records.filter(item => !filterMonth || item.duty_date.startsWith(filterMonth));
-    }, [records, filterMonth]);
+        return records.filter(item => {
+            const assignment = assignments.find(a => a.id === item.assignment_id);
+            if (!filterMonth || !item.duty_date.startsWith(filterMonth)) return false;
+            if (isScheduleManager || canManageReports) return true;
+            return (
+                (assignment ? isCurrentUserAssignedDuty(assignment) : false) ||
+                isCurrentUserFinalDuty(item) ||
+                isCurrentUserSwapRelated(item)
+            );
+        });
+    }, [records, assignments, filterMonth, currentUserId, currentUserName, isScheduleManager, canManageReports]);
 
     const monthAssignments = useMemo(() => {
         return filteredAssignments.filter(item => item.duty_date.startsWith(filterMonth));
@@ -469,7 +505,7 @@ export const DutyManagement = () => {
     const canCurrentUserRecordDuty = (assignment: DutyAssignment, record?: DutyRecord) => {
         if (!record) return false;
         if (record.final_duty_user_id) return record.final_duty_user_id === currentUserId;
-        return belongsToCurrentUser(assignment);
+        return isCurrentUserAssignedDuty(assignment);
     };
 
     const canOpenRecordDialog = (assignment: DutyAssignment, record?: DutyRecord) => {
@@ -644,13 +680,13 @@ export const DutyManagement = () => {
 
     const canConfirmNoSwap = (assignment: DutyAssignment, record?: DutyRecord) => {
         if (isPastDutyDate(assignment.duty_date)) return false;
-        if (!belongsToCurrentUser(assignment)) return false;
+        if (!isCurrentUserAssignedDuty(assignment)) return false;
         return !record;
     };
 
     const canRequestSwap = (assignment: DutyAssignment, record?: DutyRecord) => {
         if (isPastDutyDate(assignment.duty_date)) return false;
-        if (!belongsToCurrentUser(assignment)) return false;
+        if (!isCurrentUserAssignedDuty(assignment)) return false;
         if (!record) return true;
         if (record.status === 'approved' || record.status === 'recorded') return false;
         return !record.swap_requested || record.swap_response_status === 'rejected';
@@ -666,7 +702,7 @@ export const DutyManagement = () => {
 
     const canSubmitForApproval = (record: DutyRecord, assignment?: DutyAssignment) => {
         if (!assignment || isPastDutyDate(assignment.duty_date)) return false;
-        if (!belongsToCurrentUser(assignment)) return false;
+        if (!isCurrentUserAssignedDuty(assignment) && !isCurrentUserFinalDuty(record)) return false;
         if (record.swap_requested && record.swap_requested_by_user_id && record.swap_requested_by_user_id !== currentUserId) return false;
         if (record.status !== 'verified') return false;
         if (record.swap_requested && record.swap_response_status !== 'accepted') return false;
@@ -873,8 +909,12 @@ export const DutyManagement = () => {
     };
 
     const getApprovalFlowState = (assignment: DutyAssignment, record?: DutyRecord) => {
-        const isOwner = belongsToCurrentUser(assignment);
+        const isOwner = isCurrentUserAssignedDuty(assignment);
         const isSwapTarget = !!record?.swap_target_user_id && record.swap_target_user_id === currentUserId;
+          const isFinalDutyUser = !!record?.final_duty_user_id && record.final_duty_user_id === currentUserId;
+          const isManagerViewer = isScheduleManager || canManageReports;
+
+
         const hasAcceptedSwap = record?.swap_requested && record?.swap_response_status === 'accepted';
         const finalDutyResolved = !!record?.final_duty_name;
         const submittedForApproval = record?.status === 'approved' || record?.status === 'recorded';
@@ -894,7 +934,7 @@ export const DutyManagement = () => {
             {
                 label: APPROVAL_STEP_LABELS[2],
                 done: finalDutyResolved,
-                active: !!record && !finalDutyResolved,
+                active: !!record && !finalDutyResolved && (isFinalDutyUser || isManagerViewer),
             },
             {
                 label: APPROVAL_STEP_LABELS[3],
@@ -987,6 +1027,7 @@ export const DutyManagement = () => {
 
     const renderAssignmentCard = (assignment: DutyAssignment, forMine = false) => {
         const record = recordByAssignmentId.get(assignment.id);
+        if (!canSeeDutyAssignment(assignment, record)) return null;
         const dutyExpired = isPastDutyDate(assignment.duty_date);
         const approvalFlow = getApprovalFlowState(assignment, record);
 
@@ -1496,11 +1537,11 @@ export const DutyManagement = () => {
                             <div className="grid grid-cols-2 gap-3">
                                 <div>
                                     <Label>นักเรียนมา</Label>
-                                    <Input type="number" value={recordForm.students_present} onChange={e => setRecordForm((p: any) => ({ ...p, students_present: +e.target.value }))} />
+                                        <Input type="number" value={recordForm.students_present} onChange={e => setRecordForm((p: any) => ({ ...p, students_present: parseInt(e.target.value || '0', 10) }))} />
                                 </div>
                                 <div>
                                     <Label>นักเรียนขาด</Label>
-                                    <Input type="number" value={recordForm.students_absent} onChange={e => setRecordForm((p: any) => ({ ...p, students_absent: +e.target.value }))} />
+                                        <Input type="number" value={recordForm.students_absent} onChange={e => setRecordForm((p: any) => ({ ...p, students_absent: parseInt(e.target.value || '0', 10) }))} />
                                 </div>
                             </div>
 
