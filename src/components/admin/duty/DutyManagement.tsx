@@ -236,6 +236,28 @@ export const DutyManagement = () => {
     const imageInputRef = useRef<HTMLInputElement>(null);
     const [swapTargetUserId, setSwapTargetUserId] = useState('');
     const [swapRequestNote, setSwapRequestNote] = useState('');
+    const [calendarStatusFilter, setCalendarStatusFilter] = useState<'all' | 'scheduled' | 'swap_pending' | 'verification_pending' | 'approval_ready' | 'approved' | 'recorded'>('all');
+
+    const matchesCalendarStatusFilter = (assignment: DutyAssignment, record?: DutyRecord) => {
+        switch (calendarStatusFilter) {
+            case 'all':
+                return true;
+            case 'scheduled':
+                return assignment.status === 'scheduled' && !record;
+            case 'swap_pending':
+                return !!record?.swap_requested && record.swap_response_status === 'pending';
+            case 'verification_pending':
+                return !!record && record.status === 'verified' && !record.approval_ready;
+            case 'approval_ready':
+                return !!record && record.status === 'verified' && record.approval_ready === true;
+            case 'approved':
+                return !!record && record.status === 'approved';
+            case 'recorded':
+                return !!record && record.status === 'recorded';
+            default:
+                return true;
+        }
+    };
     const [respondDialogRecord, setRespondDialogRecord] = useState<DutyRecord | null>(null);
     const [swapResponseNote, setSwapResponseNote] = useState('');
     const [reportMonth, setReportMonth] = useState(new Date().toISOString().slice(0, 7));
@@ -360,6 +382,13 @@ export const DutyManagement = () => {
         return filteredAssignments.filter(item => item.duty_date.startsWith(filterMonth));
     }, [filteredAssignments, filterMonth]);
 
+    const calendarVisibleAssignments = useMemo(() => {
+        return monthAssignments.filter(assignment => {
+            const record = recordByAssignmentId.get(assignment.id);
+            return matchesCalendarStatusFilter(assignment, record);
+        });
+    }, [monthAssignments, recordByAssignmentId, calendarStatusFilter]);
+
     const pendingApprovalItems = useMemo(() => {
         if (!isScheduleManager && !canManageReports) return [];
         return (records || [])
@@ -375,7 +404,7 @@ export const DutyManagement = () => {
 
     const calendarItemsByDate = useMemo(() => {
         const map = new Map<string, DutyCalendarItem[]>();
-        monthAssignments.forEach(assignment => {
+        calendarVisibleAssignments.forEach(assignment => {
             const record = recordByAssignmentId.get(assignment.id);
             const key = assignment.duty_date;
             const items = map.get(key) || [];
@@ -402,6 +431,37 @@ export const DutyManagement = () => {
         if (!isScheduleManager && !canManageReports) return 0;
         return records.filter(record => record.status === 'verified' && record.approval_ready === true).length;
     }, [records, isScheduleManager, canManageReports]);
+
+    const dutyStatusOverview = useMemo(() => {
+        const overview = {
+            assignmentsScheduled: 0,
+            recordsVerifiedReady: 0,
+            recordsVerified: 0,
+            recordsApproved: 0,
+            recordsRecorded: 0,
+            swapPending: 0,
+            swapAccepted: 0,
+            swapRejected: 0,
+        };
+
+        overview.assignmentsScheduled = assignments.filter(item => item.status === 'scheduled').length;
+
+        records.forEach(record => {
+            if (record.status === 'verified') {
+                if (record.approval_ready) overview.recordsVerifiedReady += 1;
+                else overview.recordsVerified += 1;
+            }
+            if (record.status === 'approved') overview.recordsApproved += 1;
+            if (record.status === 'recorded') overview.recordsRecorded += 1;
+            if (record.swap_requested) {
+                if (record.swap_response_status === 'pending') overview.swapPending += 1;
+                if (record.swap_response_status === 'accepted') overview.swapAccepted += 1;
+                if (record.swap_response_status === 'rejected') overview.swapRejected += 1;
+            }
+        });
+
+        return overview;
+    }, [assignments, records]);
 
     const selectableStaff = useMemo(() => {
         return staffList.filter(person => person.id !== currentUserId);
@@ -1064,7 +1124,13 @@ export const DutyManagement = () => {
             return;
         }
 
-        const rows = reportRecords.map((record, index) => `
+        const rows = reportRecords.map((record, index) => {
+            const images = Array.isArray(record.duty_images) ? record.duty_images.slice(0, 3) : [];
+            const imageCell = images.length
+                ? images.map(img => `<img src="${img.url}" alt="image" style="width:60px;height:60px;object-fit:cover;border-radius:4px;margin-right:4px;" />`).join('')
+                : '-';
+
+            return `
             <tr>
                 <td>${index + 1}</td>
                 <td>${new Date(record.duty_date).toLocaleDateString('th-TH')}</td>
@@ -1074,8 +1140,10 @@ export const DutyManagement = () => {
                 <td>${record.final_duty_name || record.recorder_name || '-'}</td>
                 <td>${STATUS_MAP[record.status] || record.status}</td>
                 <td>${record.incidents || '-'}</td>
+                <td>${imageCell}</td>
             </tr>
-        `).join('');
+        `;
+        }).join('');
 
         printableWindow.document.write(`
             <html>
@@ -1111,10 +1179,11 @@ export const DutyManagement = () => {
                                 <th>ผู้ปฏิบัติเวรสุดท้าย</th>
                                 <th>สถานะ</th>
                                 <th>เหตุการณ์</th>
+                                <th>รูปภาพประกอบ</th>
                             </tr>
                         </thead>
                         <tbody>
-                            ${rows || '<tr><td colspan="8">ไม่พบข้อมูลในเดือนที่เลือก</td></tr>'}
+                            ${rows || '<tr><td colspan="9">ไม่พบข้อมูลในเดือนที่เลือก</td></tr>'}
                         </tbody>
                     </table>
                 </body>
@@ -1366,6 +1435,41 @@ export const DutyManagement = () => {
                         <p className="text-muted-foreground text-sm mt-1">
                             มุมมองใหม่แบบปฏิทิน เน้นสถานะสำคัญ ปุ่มชัด และลดข้อความยาวที่ไม่จำเป็น
                         </p>
+
+                        <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                            <div className="rounded-lg border bg-white p-3">
+                                <div className="text-xs text-muted-foreground">กำหนดแล้ว</div>
+                                <div className="text-lg font-bold">{dutyStatusOverview.assignmentsScheduled}</div>
+                            </div>
+                            <div className="rounded-lg border bg-white p-3">
+                                <div className="text-xs text-muted-foreground">รอคำขออนุมัติ</div>
+                                <div className="text-lg font-bold">{dutyStatusOverview.recordsVerifiedReady}</div>
+                            </div>
+                            <div className="rounded-lg border bg-white p-3">
+                                <div className="text-xs text-muted-foreground">รอแก้ไข/ยังไม่ขออนุมัติ</div>
+                                <div className="text-lg font-bold">{dutyStatusOverview.recordsVerified}</div>
+                            </div>
+                            <div className="rounded-lg border bg-white p-3">
+                                <div className="text-xs text-muted-foreground">อนุมัติแล้ว</div>
+                                <div className="text-lg font-bold">{dutyStatusOverview.recordsApproved}</div>
+                            </div>
+                        </div>
+
+                        <div className="mt-2 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                            <div className="rounded-lg border bg-white p-3">
+                                <div className="text-xs text-muted-foreground">บันทึกแล้ว</div>
+                                <div className="text-lg font-bold">{dutyStatusOverview.recordsRecorded}</div>
+                            </div>
+                            <div className="rounded-lg border bg-white p-3">
+                                <div className="text-xs text-muted-foreground">แลกเวรรอรับ</div>
+                                <div className="text-lg font-bold">{dutyStatusOverview.swapPending}</div>
+                            </div>
+                            <div className="rounded-lg border bg-white p-3">
+                                <div className="text-xs text-muted-foreground">แลกเวรยอมรับแล้ว</div>
+                                <div className="text-lg font-bold">{dutyStatusOverview.swapAccepted}</div>
+                            </div>
+                        </div>
+
                         {(isScheduleManager || canManageReports) && pendingApprovalCount > 0 && (
                             <div className="mt-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
                                 มีรายการส่งคำขออนุมัติ {pendingApprovalCount} รายการ (แสดงต่อหัวหน้ากิจการนักเรียน / รองผอ.บริหาร)
@@ -1443,6 +1547,28 @@ export const DutyManagement = () => {
                                     <Badge className="bg-amber-50 text-amber-900 border-amber-200">รอรับเวร</Badge>
                                     <Badge className="bg-emerald-50 text-emerald-900 border-emerald-200">บันทึกแล้ว</Badge>
                                 </div>
+                            </div>
+
+                            <div className="flex flex-wrap gap-2 items-center text-xs mb-3">
+                                <span className="text-muted-foreground">กรองสถานะ:</span>
+                                {[
+                                    { key: 'all', label: 'ทั้งหมด' },
+                                    { key: 'scheduled', label: 'กำหนด' },
+                                    { key: 'swap_pending', label: 'รอแลกเวร' },
+                                    { key: 'verification_pending', label: 'รอตรวจสอบ' },
+                                    { key: 'approval_ready', label: 'รออนุมัติ' },
+                                    { key: 'approved', label: 'อนุมัติแล้ว' },
+                                    { key: 'recorded', label: 'บันทึกแล้ว' },
+                                ].map(opt => (
+                                    <Button
+                                        key={opt.key}
+                                        size="xs"
+                                        variant={calendarStatusFilter === opt.key ? 'default' : 'outline'}
+                                        onClick={() => setCalendarStatusFilter(opt.key as any)}
+                                    >
+                                        {opt.label}
+                                    </Button>
+                                ))}
                             </div>
 
                             {(isScheduleManager || canManageReports) && pendingApprovalItems.length > 0 && (
