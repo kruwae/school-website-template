@@ -300,7 +300,9 @@ export const DutyManagement = () => {
         return (
             isCurrentUserAssignedDuty(assignment) ||
             isCurrentUserFinalDuty(record) ||
-            isCurrentUserSwapRelated(record)
+            isCurrentUserSwapRelated(record) ||
+            record?.status === 'approved' ||
+            record?.status === 'recorded'
         );
     };
 
@@ -681,7 +683,8 @@ export const DutyManagement = () => {
     const canConfirmNoSwap = (assignment: DutyAssignment, record?: DutyRecord) => {
         if (isPastDutyDate(assignment.duty_date)) return false;
         if (!isCurrentUserAssignedDuty(assignment)) return false;
-        return !record;
+        if (record && record.status !== 'draft' && record.status !== 'verified') return false;
+        return !record || !record.swap_requested;
     };
 
     const canRequestSwap = (assignment: DutyAssignment, record?: DutyRecord) => {
@@ -1537,11 +1540,11 @@ export const DutyManagement = () => {
                             <div className="grid grid-cols-2 gap-3">
                                 <div>
                                     <Label>นักเรียนมา</Label>
-                                        <Input type="number" value={recordForm.students_present} onChange={e => setRecordForm((p: any) => ({ ...p, students_present: parseInt(e.target.value || '0', 10) }))} />
+                                        <Input type="number" value={recordForm.students_present} onChange={e => setRecordForm((p: any) => ({ ...p, students_present: Number(e.target.value || 0) }))} />
                                 </div>
                                 <div>
                                     <Label>นักเรียนขาด</Label>
-                                        <Input type="number" value={recordForm.students_absent} onChange={e => setRecordForm((p: any) => ({ ...p, students_absent: parseInt(e.target.value || '0', 10) }))} />
+                                        <Input type="number" value={recordForm.students_absent} onChange={e => setRecordForm((p: any) => ({ ...p, students_absent: Number(e.target.value || 0) }))} />
                                 </div>
                             </div>
 
