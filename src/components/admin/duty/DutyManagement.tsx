@@ -85,6 +85,7 @@ const SHIFT_MAP: Record<string, string> = {
 
 const STATUS_MAP: Record<string, string> = {
     verified: 'ตกลง/แลกเวรแล้ว',
+    pending_approval: 'รออนุมัติจากหัวหน้ากิจการ',
     approved: 'อนุมัติแล้ว',
     recorded: 'บันทึกเวรแล้ว',
 };
@@ -363,7 +364,7 @@ export const DutyManagement = () => {
     const pendingApprovalItems = useMemo(() => {
         if (!isScheduleManager && !canManageReports) return [];
         return (records || [])
-            .filter(record => record.status === 'verified' && (!record.swap_requested || record.swap_response_status === 'accepted'))
+            .filter(record => record.status === 'pending_approval' && (!record.swap_requested || record.swap_response_status === 'accepted'))
             .map(record => {
                 const assignment = assignments.find(a => a.id === record.assignment_id);
                 return { record, assignment };
@@ -400,7 +401,7 @@ export const DutyManagement = () => {
 
     const pendingApprovalCount = useMemo(() => {
         if (!isScheduleManager && !canManageReports) return 0;
-        return records.filter(record => record.status === 'verified' || record.status === 'approved' || (record.swap_requested && record.swap_response_status === 'accepted')).length;
+        return records.filter(record => record.status === 'pending_approval').length;
     }, [records, isScheduleManager, canManageReports]);
 
     const selectableStaff = useMemo(() => {
@@ -758,8 +759,9 @@ export const DutyManagement = () => {
         const isUserOwnerOrFinal = isCurrentUserAssignedDuty(assignment) || isCurrentUserFinalDuty(record);
         const isUserManager = isScheduleManager || canManageReports;
 
-        if (!isUserOwnerOrFinal && !isUserManager) return false;
-        if (record.swap_requested && record.swap_requested_by_user_id && record.swap_requested_by_user_id !== currentUserId && !isUserManager) return false;
+        // ผู้ส่งขออนุมัติต้องเป็นเจ้าของเวร/ผู้ปฏิบัติสุดท้าย ไม่ใช่หัวหน้าระบบ
+        if (!isUserOwnerOrFinal || isUserManager) return false;
+        if (record.swap_requested && record.swap_requested_by_user_id && record.swap_requested_by_user_id !== currentUserId) return false;
         if (record.status !== 'verified') return false;
         if (record.swap_requested && record.swap_response_status !== 'accepted') return false;
         return !!record.approval_ready;
@@ -952,15 +954,58 @@ export const DutyManagement = () => {
         }
 
         const { error } = await (supabase.from('duty_records' as any) as any)
+            .update({ status: 'pending_approval' })
+            .eq('id', record.id);
+
+        if (error) {
+            toast({ title: 'ส่งคำขออนุมัติไม่สำเร็จ', description: error.message, variant: 'destructive' });
+            return;
+        }
+
+        toast({ title: 'ส่งคำขออนุมัติเรียบร้อยแล้ว', description: 'รอหัวหน้ากิจการตรวจสอบและอนุมัติ', });
+        fetchAll();
+    };
+
+    const canManageApproval = (record: DutyRecord) => {
+        if (!record) return false;
+        return (isScheduleManager || canManageReports) && record.status === 'pending_approval';
+    };
+
+    const handleApproveRecord = async (record: DutyRecord) => {
+        if (!canManageApproval(record)) {
+            toast({ title: 'คุณไม่มีสิทธิ์อนุมัติ', variant: 'destructive' });
+            return;
+        }
+
+        const { error } = await (supabase.from('duty_records' as any) as any)
             .update({ status: 'approved' })
             .eq('id', record.id);
 
         if (error) {
-            toast({ title: 'ส่งอนุมัติไม่สำเร็จ', description: error.message, variant: 'destructive' });
+            toast({ title: 'อนุมัติไม่สำเร็จ', description: error.message, variant: 'destructive' });
             return;
         }
 
-        toast({ title: 'ส่งบันทึกเวรเข้าอนุมัติตามลำดับแล้ว' });
+        toast({ title: 'อนุมัติเรียบร้อยแล้ว', description: 'เจ้าของเวรสามารถบันทึกเวรได้', });
+        fetchAll();
+    };
+
+    const handleRejectRecord = async (record: DutyRecord) => {
+        if (!canManageApproval(record)) {
+            toast({ title: 'คุณไม่มีสิทธิ์ปฏิเสธ', variant: 'destructive' });
+            return;
+        }
+
+        const { error } = await (supabase.from('duty_records' as any) as any)
+            .update({ status: 'verified', approval_ready: false })
+            .eq('id', record.id);
+
+        if (error) {
+            toast({ title: 'ปฏิเสธไม่สำเร็จ', description: error.message, variant: 'destructive' });
+            return;
+        }
+
+        toast({ title: 'ปฏิเสธคำขออนุมัติแล้ว', description: 'ส่งกลับไปให้เจ้าของเวรแก้ไขและส่งคำขอใหม่', });
         fetchAll();
     };
 
@@ -973,6 +1018,7 @@ export const DutyManagement = () => {
 
         const hasAcceptedSwap = record?.swap_requested && record?.swap_response_status === 'accepted';
         const finalDutyResolved = !!record?.final_duty_name;
+        const pendingApproval = record?.status === 'pending_approval';
         const submittedForApproval = record?.status === 'approved' || record?.status === 'recorded';
         const canRecordNow = !!record && canOpenRecordDialog(assignment, record);
 
@@ -995,7 +1041,7 @@ export const DutyManagement = () => {
             {
                 label: APPROVAL_STEP_LABELS[3],
                 done: submittedForApproval,
-                active: !!record && !submittedForApproval && canSubmitForApproval(record, assignment),
+                active: !!record && !submittedForApproval && pendingApproval,
             },
             {
                 label: APPROVAL_STEP_LABELS[4],
@@ -1184,14 +1230,23 @@ export const DutyManagement = () => {
                                         </Button>
                                     )}
 
-                                    {(canOpenSelfRecordActions(assignment, record) || isScheduleManager || canManageReports) && (
+                                    {canSubmitForApproval(record, assignment) && (
+                                        <Button size="sm" className="gap-2" onClick={() => handleSubmitForApproval(record)}>
+                                            <Send className="w-4 h-4" />
+                                            ส่งคำขออนุมัติ
+                                        </Button>
+                                    )}
+
+                                    {(isScheduleManager || canManageReports) && record.status === 'pending_approval' && (
                                         <>
-                                            {canSubmitForApproval(record, assignment) && (
-                                                <Button size="sm" className="gap-2" onClick={() => handleSubmitForApproval(record)}>
-                                                    <Send className="w-4 h-4" />
-                                                    ส่งอนุมัติ
-                                                </Button>
-                                            )}
+                                            <Button size="sm" onClick={() => handleApproveRecord(record)} className="gap-2">
+                                                <CheckCheck className="w-4 h-4" />
+                                                อนุมัติ
+                                            </Button>
+                                            <Button size="sm" variant="destructive" onClick={() => handleRejectRecord(record)} className="gap-2">
+                                                <X className="w-4 h-4" />
+                                                ปฏิเสธ
+                                            </Button>
                                         </>
                                     )}
                                 </>
@@ -1275,9 +1330,11 @@ export const DutyManagement = () => {
                                     <p className="text-xs text-emerald-700 mt-2">
                                         {record.status === 'approved'
                                             ? 'อนุมัติแล้ว ผู้ปฏิบัติเวรสุดท้ายเท่านั้นที่จะเห็นปุ่มบันทึกเวร'
-                                            : record.swap_requested
-                                                ? 'กรณีแลกเวร ต้องให้ผู้รับเวรตอบตกลงก่อน ระบบจะแสดงผู้รับเวรและผู้ปฏิบัติเวรสุดท้ายให้ชัดเจน แล้วจึงส่งอนุมัติตามลำดับ'
-                                                : 'กรณีตกลงไม่มีการแลกเวร เจ้าของเวรจะเป็นผู้ส่งอนุมัติ'}
+                                            : record.status === 'pending_approval'
+                                                ? 'ส่งคำขออนุมัติแล้ว รอหัวหน้ากิจการอนุมัติ'
+                                                : record.status === 'verified'
+                                                    ? 'พร้อมส่งคำขออนุมัติ โดยเจ้าของเวรหรือผู้ปฏิบัติสุดท้าย'
+                                                    : 'กรณีแลกเวร ต้องให้ผู้รับเวรตอบตกลงก่อน ระบบจะแสดงผู้รับเวรและผู้ปฏิบัติเวรสุดท้ายให้ชัดเจน แล้วจึงส่งอนุมัติตามลำดับ'}
                                     </p>
                                 </div>
                             </div>
@@ -1400,9 +1457,14 @@ export const DutyManagement = () => {
                                                     <div className="font-semibold">{item.assignment?.assigned_name || 'ไม่มีผู้รับเวร'}</div>
                                                     <div className="text-xs text-muted-foreground">{new Date(item.record.duty_date).toLocaleDateString('th-TH')} • {item.record.duty_shift_label}</div>
                                                 </div>
-                                                <Button size="sm" onClick={() => handleSubmitForApproval(item.record)}>
-                                                    อนุมัติเวร
-                                                </Button>
+                                                <div className="flex items-center gap-2">
+                                                    <Button size="sm" onClick={() => handleApproveRecord(item.record)}>
+                                                        อนุมัติ
+                                                    </Button>
+                                                    <Button size="sm" variant="destructive" onClick={() => handleRejectRecord(item.record)}>
+                                                        ปฏิเสธ
+                                                    </Button>
+                                                </div>
                                             </div>
                                         </div>
                                     ))}
