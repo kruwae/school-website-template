@@ -1,4 +1,4 @@
-import { ReactNode, useState } from 'react';
+import { ReactNode, useEffect, useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import {
@@ -126,8 +126,12 @@ export const AdminLayout = ({ children }: AdminLayoutProps) => {
     const location = useLocation();
     const searchParams = new URLSearchParams(location.search);
     const activeTab = searchParams.get('tab') || 'dashboard';
-    const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
+    const [collapsed, setCollapsed] = useState<Record<string, boolean>>(() => {
+        const saved = localStorage.getItem('admin-sidebar-collapsed');
+        return saved ? JSON.parse(saved) : {};
+    });
     const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+    const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
     const currentUser = getCurrentUser();
     const { canSee, loading: permLoading } = usePermissions();
@@ -137,8 +141,16 @@ export const AdminLayout = ({ children }: AdminLayoutProps) => {
         navigate('/admin');
     };
 
+    useEffect(() => {
+        localStorage.setItem('admin-sidebar-collapsed', JSON.stringify(collapsed));
+    }, [collapsed]);
+
     const toggleGroup = (label: string) => {
         setCollapsed(prev => ({ ...prev, [label]: !prev[label] }));
+    };
+
+    const toggleSidebar = () => {
+        setSidebarCollapsed(prev => !prev);
     };
 
     const handleNavigate = (path: string) => {
