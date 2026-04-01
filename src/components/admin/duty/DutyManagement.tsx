@@ -2169,6 +2169,11 @@ export const DutyManagement = () => {
                                         <Button size="sm" variant="destructive" onClick={() => handleRejectRecord(selectedCalendarRecord)}>ปฏิเสธ</Button>
                                     </>
                                 )}
+                                {detailAssignment && selectedCalendarRecord && canOpenRecordDialog(detailAssignment, selectedCalendarRecord) && (
+                                    <Button size="sm" variant="default" onClick={() => openRecordDialog(detailAssignment)}>
+                                        บันทึกเวร
+                                    </Button>
+                                )}
                             </div>
                         </div>
                     )}
