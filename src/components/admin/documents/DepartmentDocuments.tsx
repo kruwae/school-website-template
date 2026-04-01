@@ -328,7 +328,7 @@ export const DepartmentDocuments = ({ deptCode, deptName, color }: Props) => {
                         </div>
                     </div>
                 </div>
-                <Button onClick={openAdd} className="gap-2" disabled={loading || !!deptNotFound || !canUploadDocuments}>
+                <Button type="button" onClick={openAdd} className="gap-2" disabled={loading || !!deptNotFound}>
                     <Plus className="w-4 h-4" /> เพิ่มเอกสาร
                 </Button>
             </div>
@@ -421,7 +421,10 @@ export const DepartmentDocuments = ({ deptCode, deptName, color }: Props) => {
                 </div>
             )}
 
-            <Dialog open={showDialog} onOpenChange={setShowDialog}>
+            <Dialog open={showDialog} onOpenChange={(open) => {
+                if (!open) setShowDialog(false);
+                else setShowDialog(true);
+            }}>
                 <DialogContent className="max-w-md">
                     <DialogHeader>
                         <DialogTitle>{editDoc ? 'แก้ไขเอกสาร' : `เพิ่มเอกสาร — ${deptName}`}</DialogTitle>
