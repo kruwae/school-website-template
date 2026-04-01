@@ -147,8 +147,27 @@ export const DepartmentDocuments = ({ deptCode, deptName, color }: Props) => {
             return;
         }
 
+        let category_id = form.category_id;
+        if (category_id.startsWith('special-work-report-')) {
+            const existing = categories.find(c => c.name === 'รายงานการปฏิบัติงาน');
+            if (existing) {
+                category_id = existing.id;
+            } else {
+                // สร้างหมวดใหม่สำหรับ รายงานการปฏิบัติงาน เมื่อยังไม่มี
+                const { data: newCat, error: catError } = await (supabase.from('document_categories' as any) as any)
+                    .insert({ name: 'รายงานการปฏิบัติงาน', department_id: deptId, order_position: categories.length + 1 })
+                    .single();
+                if (catError) throw catError;
+                if (newCat?.id) {
+                    category_id = newCat.id;
+                    setCategories(prev => [...prev, newCat]);
+                }
+            }
+        }
+
         const payload: any = {
             ...form,
+            category_id,
             department_id: deptId,
             uploader_user_id: editDoc ? editDoc.uploader_user_id : (currentUser?.id || null),
         };
