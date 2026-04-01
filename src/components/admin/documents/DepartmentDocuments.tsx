@@ -113,30 +113,27 @@ export const DepartmentDocuments = ({ deptCode, deptName, color }: Props) => {
         setDeptNotFound(null);
         try {
             let deptData: any = null;
+            const normalizedCode = deptCode.startsWith('dept-') ? deptCode.replace(/^dept-/, '') : deptCode;
+            const codeCandidates = [normalizedCode, `dept-${normalizedCode}`];
 
-            // 1) Try lookup by code (as expected)
+            // 1) Try lookup by one of several accepted department_code values
             const deptByCode = await (supabase.from('departments' as any) as any)
-                .select('id').eq('code', deptCode).single();
+                .select('id, name, code')
+                .in('code', codeCandidates)
+                .single();
+
             if (deptByCode.data && !deptByCode.error) {
                 deptData = deptByCode.data;
             }
 
-            // 2) If not found, try lookup by Thai department name to support name-based data
-            if (!deptData) {
+            // 2) If still not found, try lookup by Thai department name (loose match)
+            if (!deptData && deptName) {
                 const deptByName = await (supabase.from('departments' as any) as any)
-                    .select('id').ilike('name', `%${deptName}%`).single();
+                    .select('id, name, code')
+                    .ilike('name', `%${deptName}%`)
+                    .single();
                 if (deptByName.data && !deptByName.error) {
                     deptData = deptByName.data;
-                }
-            }
-
-            // 3) Extra fallback: some data may store code prefix with 'dept-', allow map
-            if (!deptData) {
-                const fallbackCode = deptCode.startsWith('dept-') ? deptCode : `dept-${deptCode}`;
-                const deptByFallbackCode = await (supabase.from('departments' as any) as any)
-                    .select('id').eq('code', fallbackCode).single();
-                if (deptByFallbackCode.data && !deptByFallbackCode.error) {
-                    deptData = deptByFallbackCode.data;
                 }
             }
 
@@ -161,6 +158,14 @@ export const DepartmentDocuments = ({ deptCode, deptName, color }: Props) => {
                 (supabase.from('document_categories' as any) as any)
                     .select('*').eq('department_id', id).order('order_position'),
             ]);
+
+            if (docsRes.error) {
+                console.error('[DepartmentDocuments] docs query failed', docsRes.error);
+                setDeptNotFound(`ไม่สามารถโหลดเอกสารฝ่ายนี้ได้: ${docsRes.error.message || docsRes.error}`);
+                setDocuments([]);
+                setCategories([]);
+                return;
+            }
 
             let docs = docsRes.data || [];
 
