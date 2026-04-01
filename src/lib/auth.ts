@@ -19,6 +19,9 @@ export interface AppUser {
   position?: string;  // ชื่อตำแหน่ง เช่น "หัวหน้าฝ่ายบริหารทั่วไป" — ใช้จับคู่ committee.name
   staff_id?: string;
   email?: string;
+  department_id?: string; // ถ้า user อยู่ฝ่ายเดียว
+  department_ids?: string[]; // ถ้า user อยู่หลายฝ่าย
+  departments?: { id: string; name: string } | { id: string; name: string }[];
 }
 
 const SESSION_KEY = 'sodflow_user';

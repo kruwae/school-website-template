@@ -64,6 +64,24 @@ export const DepartmentDocuments = ({ deptCode, deptName, color }: Props) => {
         return doc.uploader_user_id === currentUser.id;
     };
 
+    const userDepartmentIds = useMemo(() => {
+        if (!currentUser) return [];
+        if (currentUser.department_ids && currentUser.department_ids.length > 0) return currentUser.department_ids;
+        if (currentUser.department_id) return [currentUser.department_id];
+        if (Array.isArray(currentUser.departments) && currentUser.departments.length > 0) {
+            return currentUser.departments.map((d: any) => d.id).filter((id: string) => !!id);
+        }
+        if ((currentUser as any)?.departments?.id) {
+            return [(currentUser as any).departments.id];
+        }
+        return [];
+    }, [currentUser]);
+
+    const isCurrentDeptMember = useMemo(() => {
+        if (!deptId) return false;
+        return userDepartmentIds.includes(deptId);
+    }, [deptId, userDepartmentIds]);
+
     const [documents, setDocuments] = useState<Document[]>([]);
     const [categories, setCategories] = useState<Category[]>([]);
     const [deptId, setDeptId] = useState<string>('');
@@ -114,7 +132,11 @@ export const DepartmentDocuments = ({ deptCode, deptName, color }: Props) => {
             let docs = docsRes.data || [];
 
             if (!canSeeAllDocuments) {
-                docs = docs.filter((d: Document) => d.uploader_user_id === currentUser?.id);
+                const isMemberOfThisDept = userDepartmentIds.includes(id);
+                if (!isMemberOfThisDept) {
+                    docs = docs.filter((d: Document) => d.uploader_user_id === currentUser?.id);
+                }
+                // หากเป็นสมาชิกฝ่ายนี้, ให้ดูเอกสารทั้งหมดของฝ่ายนี้ได้
             }
 
             setDocuments(docs);
@@ -234,7 +256,7 @@ export const DepartmentDocuments = ({ deptCode, deptName, color }: Props) => {
                         <h1 className="text-xl font-bold">{deptName}</h1>
                         <div className="flex items-center gap-2 mt-0.5">
                             <p className="text-sm text-muted-foreground">เอกสารและรายงาน</p>
-                            {currentUser?.role === 'dept_head' && (
+                            {(currentUser?.role === 'dept_head' || isCurrentDeptMember) && (
                                 <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 bg-purple-100 text-purple-700 rounded-full font-medium">
                                     <Users className="w-3 h-3" />
                                     กลุ่มงานของฉัน

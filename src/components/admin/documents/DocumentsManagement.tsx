@@ -59,6 +59,19 @@ export const DocumentsManagement = () => {
     /** เฉพาะ role = admin เท่านั้นที่มีสิทธิ์เต็ม (เพิ่ม/แก้ไข/ลบ) */
     const isAdmin = currentUser?.role === 'admin';
 
+    const userDepartmentIds = useMemo(() => {
+        if (!currentUser) return [];
+        if (currentUser.department_ids && currentUser.department_ids.length > 0) return currentUser.department_ids;
+        if (currentUser.department_id) return [currentUser.department_id];
+        if (Array.isArray(currentUser.departments) && currentUser.departments.length > 0) {
+            return currentUser.departments.map((d: any) => d.id).filter((id: string) => !!id);
+        }
+        if ((currentUser as any)?.departments?.id) {
+            return [(currentUser as any).departments.id];
+        }
+        return [];
+    }, [currentUser]);
+
     const [documents, setDocuments] = useState<Document[]>([]);
     const [departments, setDepartments] = useState<Department[]>([]);
     const [categories, setCategories] = useState<Category[]>([]);
@@ -109,8 +122,11 @@ export const DocumentsManagement = () => {
         if (!currentUser) {
             return [];
         }
-        return documents.filter((doc) => doc.uploader_user_id === currentUser.id);
-    }, [canSeeAllDocuments, currentUser, documents]);
+        return documents.filter((doc) => {
+            return (doc.uploader_user_id === currentUser.id)
+                || userDepartmentIds.includes(doc.department_id);
+        });
+    }, [canSeeAllDocuments, currentUser, documents, userDepartmentIds]);
 
     const filteredDocs = visibleDocuments.filter(d => {
         const matchSearch = !search
