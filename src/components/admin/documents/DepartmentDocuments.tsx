@@ -85,6 +85,7 @@ export const DepartmentDocuments = ({ deptCode, deptName, color }: Props) => {
     const [documents, setDocuments] = useState<Document[]>([]);
     const [categories, setCategories] = useState<Category[]>([]);
     const [deptId, setDeptId] = useState<string>('');
+    const [deptNotFound, setDeptNotFound] = useState<string | null>(null);
     const [loading, setLoading] = useState(true);
     const [filterCat, setFilterCat] = useState('all');
     const [filterYear, setFilterYear] = useState('2568');
@@ -111,10 +112,44 @@ export const DepartmentDocuments = ({ deptCode, deptName, color }: Props) => {
 
     const fetchDeptAndDocs = async () => {
         setLoading(true);
+        setDeptNotFound(null);
         try {
-            const { data: deptData } = await (supabase.from('departments' as any) as any)
+            let deptData: any = null;
+
+            // 1) Try lookup by code (as expected)
+            const deptByCode = await (supabase.from('departments' as any) as any)
                 .select('id').eq('code', deptCode).single();
-            if (!deptData) return;
+            if (deptByCode.data && !deptByCode.error) {
+                deptData = deptByCode.data;
+            }
+
+            // 2) If not found, try lookup by Thai department name to support name-based data
+            if (!deptData) {
+                const deptByName = await (supabase.from('departments' as any) as any)
+                    .select('id').ilike('name', `%${deptName}%`).single();
+                if (deptByName.data && !deptByName.error) {
+                    deptData = deptByName.data;
+                }
+            }
+
+            // 3) Extra fallback: some data may store code prefix with 'dept-', allow map
+            if (!deptData) {
+                const fallbackCode = deptCode.startsWith('dept-') ? deptCode : `dept-${deptCode}`;
+                const deptByFallbackCode = await (supabase.from('departments' as any) as any)
+                    .select('id').eq('code', fallbackCode).single();
+                if (deptByFallbackCode.data && !deptByFallbackCode.error) {
+                    deptData = deptByFallbackCode.data;
+                }
+            }
+
+            if (!deptData) {
+                setDeptId('');
+                setDeptNotFound(`ไม่พบข้อมูลฝ่ายงาน "${deptName}" (code: ${deptCode})`);
+                setDocuments([]);
+                setCategories([]);
+                return;
+            }
+
             const id = deptData.id;
             setDeptId(id);
 
@@ -269,6 +304,15 @@ export const DepartmentDocuments = ({ deptCode, deptName, color }: Props) => {
                     <Plus className="w-4 h-4" /> เพิ่มเอกสาร
                 </Button>
             </div>
+
+            {!!deptNotFound && (
+                <Card className="mb-4 border-red-300 bg-red-50">
+                    <CardContent className="p-4 text-red-700">
+                        <p className="font-medium">{deptNotFound}</p>
+                        <p className="text-sm">กรุณาติดต่อผู้ดูแลระบบเพื่อปรับข้อมูลฝ่ายงานในฐานข้อมูลให้ถูกต้อง</p>
+                    </CardContent>
+                </Card>
+            )}
 
             {!canSeeAllDocuments && (
                 <div className="flex items-center gap-2 mb-6 px-4 py-2.5 rounded-lg bg-amber-50 border border-amber-200 text-amber-800 text-sm">
