@@ -2156,6 +2156,11 @@ export const DutyManagement = () => {
                                         รับแลกเวร
                                     </Button>
                                 )}
+                                {selectedCalendarRecord && detailAssignment && canSubmitForApproval(selectedCalendarRecord, detailAssignment) && (
+                                    <Button size="sm" variant="secondary" onClick={() => handleSubmitForApproval(selectedCalendarRecord)}>
+                                        ส่งคำขออนุมัติ
+                                    </Button>
+                                )}
                                 {selectedCalendarRecord && canManageApproval(selectedCalendarRecord) && (
                                     <>
                                         <Button size="sm" onClick={() => handleApproveRecord(selectedCalendarRecord)}>อนุมัติ</Button>
