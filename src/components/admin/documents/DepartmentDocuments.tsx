@@ -56,6 +56,7 @@ export const DepartmentDocuments = ({ deptCode, deptName, color }: Props) => {
     const canSeeAllDocuments = currentUser
         ? ['admin', 'director', 'deputy_director', 'dept_head', 'head_general', 'head_budget', 'head_personnel', 'head_student'].includes(currentUser.role)
         : false;
+    const canUploadDocuments = !!currentUser;
 
     /** เจ้าของไฟล์หรือ admin เท่านั้นที่ลบได้ */
     const canDelete = (doc: Document): boolean => {
@@ -209,19 +210,46 @@ export const DepartmentDocuments = ({ deptCode, deptName, color }: Props) => {
             return;
         }
 
+        if (!deptId) {
+            toast({
+                title: 'ไม่พบฝ่ายงาน',
+                description: 'ไม่สามารถบันทึกเอกสารได้เพราะยังไม่ได้โหลด department_id ของฝ่ายนี้',
+                variant: 'destructive',
+            });
+            return;
+        }
+
         let category_id = form.category_id;
         if (category_id.startsWith('special-work-report-')) {
             const existing = categories.find(c => c.name === 'รายงานการปฏิบัติงาน');
             if (existing) {
                 category_id = existing.id;
             } else {
-                const { data: newCat, error: catError } = await (supabase.from('document_categories' as any) as any)
-                    .insert({ name: 'รายงานการปฏิบัติงาน', department_id: deptId, order_position: categories.length + 1 })
-                    .single();
-                if (catError) throw catError;
-                if (newCat?.id) {
+                try {
+                    const { data: newCat, error: catError } = await (supabase.from('document_categories' as any) as any)
+                        .insert({ name: 'รายงานการปฏิบัติงาน', department_id: deptId, order_position: categories.length + 1 })
+                        .select('id, name, department_id')
+                        .single();
+
+                    if (catError) throw catError;
+
+                    if (!newCat?.id) {
+                        throw new Error('ไม่สามารถสร้างหมวดหมู่รายงานการปฏิบัติงานได้');
+                    }
+
                     category_id = newCat.id;
-                    setCategories(prev => [...prev, newCat]);
+                    setCategories(prev => {
+                        if (prev.some(c => c.id === newCat.id)) return prev;
+                        return [...prev, newCat];
+                    });
+                } catch (catError: any) {
+                    console.error('[handleSave] create category error:', catError);
+                    toast({
+                        title: 'เกิดข้อผิดพลาด',
+                        description: catError?.message || 'ไม่สามารถสร้างหมวดหมู่รายงานการปฏิบัติงานได้',
+                        variant: 'destructive',
+                    });
+                    return;
                 }
             }
         }
@@ -234,10 +262,6 @@ export const DepartmentDocuments = ({ deptCode, deptName, color }: Props) => {
         };
 
         try {
-            if (!deptId) {
-                throw new Error(`ไม่พบ department_id ของฝ่าย ${deptCode}`);
-            }
-
             if (editDoc) {
                 const { error } = await (supabase.from('documents' as any) as any)
                     .update(payload)
@@ -304,7 +328,7 @@ export const DepartmentDocuments = ({ deptCode, deptName, color }: Props) => {
                         </div>
                     </div>
                 </div>
-                <Button onClick={openAdd} className="gap-2" disabled={loading || !!deptNotFound || !deptId}>
+                <Button onClick={openAdd} className="gap-2" disabled={loading || !!deptNotFound || !canUploadDocuments}>
                     <Plus className="w-4 h-4" /> เพิ่มเอกสาร
                 </Button>
             </div>
