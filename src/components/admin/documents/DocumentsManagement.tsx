@@ -53,7 +53,7 @@ export const DocumentsManagement = () => {
 
     /** หัวหน้า/ผู้บริหารเห็นทั้งหมด, สมาชิกทั่วไปเห็นเฉพาะเอกสารของตน */
     const canSeeAllDocuments = currentUser
-        ? ['admin', 'director', 'deputy_director', 'dept_head'].includes(currentUser.role)
+? ['admin', 'director', 'deputy_director', 'dept_head', 'head_general', 'head_budget', 'head_personnel', 'head_student'].includes(currentUser.role)
         : false;
 
     /** เฉพาะ role = admin เท่านั้นที่มีสิทธิ์เต็ม (เพิ่ม/แก้ไข/ลบ) */

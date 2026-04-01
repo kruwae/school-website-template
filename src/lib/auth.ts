@@ -5,11 +5,16 @@ export type UserRole =
   | 'director'
   | 'deputy_director'
   | 'dept_head'
+  | 'head_general'
+  | 'head_budget'
+  | 'head_personnel'
+  | 'head_student'
   | 'teacher'
   | 'support_staff'
   | 'temp_employee'
   | 'assistant'
-  | 'temp_staff';
+  | 'temp_staff'
+  | string; // allow extra custom role names from database
 
 export interface AppUser {
   id: string;

@@ -54,7 +54,7 @@ export const DepartmentDocuments = ({ deptCode, deptName, color }: Props) => {
     const currentUserName = currentUser?.full_name || '';
 
     const canSeeAllDocuments = currentUser
-        ? ['admin', 'director', 'deputy_director', 'dept_head'].includes(currentUser.role)
+? ['admin', 'director', 'deputy_director', 'dept_head', 'head_general', 'head_budget', 'head_personnel', 'head_student'].includes(currentUser.role)
         : false;
 
     /** เจ้าของไฟล์หรือ admin เท่านั้นที่ลบได้ */

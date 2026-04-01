@@ -60,6 +60,30 @@ export const DEFAULT_ROLE_MENUS: Record<UserRole, Set<string>> = {
     'documents', 'duty', 'leave', 'maintenance',
     'audit-teacher',
   ]),
+  head_general: new Set([
+    'dashboard', 'news',
+    'dept-academic', 'dept-general', 'dept-budget', 'dept-personnel', 'dept-student',
+    'documents', 'duty', 'leave', 'maintenance',
+    'audit-teacher',
+  ]),
+  head_budget: new Set([
+    'dashboard', 'news',
+    'dept-academic', 'dept-general', 'dept-budget', 'dept-personnel', 'dept-student',
+    'documents', 'duty', 'leave', 'maintenance',
+    'audit-teacher',
+  ]),
+  head_personnel: new Set([
+    'dashboard', 'news',
+    'dept-academic', 'dept-general', 'dept-budget', 'dept-personnel', 'dept-student',
+    'documents', 'duty', 'leave', 'maintenance',
+    'audit-teacher',
+  ]),
+  head_student: new Set([
+    'dashboard', 'news',
+    'dept-academic', 'dept-general', 'dept-budget', 'dept-personnel', 'dept-student',
+    'documents', 'duty', 'leave', 'maintenance',
+    'audit-teacher',
+  ]),
 
   // ครูผู้สอน เห็นเมนูพื้นฐาน
   teacher: new Set([
@@ -95,6 +119,7 @@ export const DEFAULT_ROLE_MENUS: Record<UserRole, Set<string>> = {
 // =============================================
 export const CAN_APPROVE_ROLES: UserRole[] = [
   'admin', 'director', 'deputy_director', 'dept_head',
+  'head_general', 'head_budget', 'head_personnel', 'head_student',
 ];
 
 // =============================================
