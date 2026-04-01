@@ -226,21 +226,26 @@ export const DepartmentDocuments = ({ deptCode, deptName, color }: Props) => {
                 category_id = existing.id;
             } else {
                 try {
-                    const { data: newCat, error: catError } = await (supabase.from('document_categories' as any) as any)
-                        .insert({ name: 'รายงานการปฏิบัติงาน', department_id: deptId, order_position: categories.length + 1 })
-                        .select('id, name, department_id')
+                    const { data: insertedRows, error: catError } = await (supabase.from('document_categories' as any) as any)
+                        .insert([{
+                            code: `work-report-${deptCode.replace(/^dept-/, '')}`,
+                            name: 'รายงานการปฏิบัติงาน',
+                            department_id: deptId,
+                            order_position: categories.length + 1,
+                        }])
+                        .select('id, code, name, department_id')
                         .single();
 
                     if (catError) throw catError;
 
-                    if (!newCat?.id) {
+                    if (!insertedRows?.id) {
                         throw new Error('ไม่สามารถสร้างหมวดหมู่รายงานการปฏิบัติงานได้');
                     }
 
-                    category_id = newCat.id;
+                    category_id = insertedRows.id;
                     setCategories(prev => {
-                        if (prev.some(c => c.id === newCat.id)) return prev;
-                        return [...prev, newCat];
+                        if (prev.some(c => c.id === insertedRows.id)) return prev;
+                        return [...prev, insertedRows];
                     });
                 } catch (catError: any) {
                     console.error('[handleSave] create category error:', catError);
@@ -421,10 +426,7 @@ export const DepartmentDocuments = ({ deptCode, deptName, color }: Props) => {
                 </div>
             )}
 
-            <Dialog open={showDialog} onOpenChange={(open) => {
-                if (!open) setShowDialog(false);
-                else setShowDialog(true);
-            }}>
+            <Dialog open={showDialog} onOpenChange={setShowDialog}>
                 <DialogContent className="max-w-md">
                     <DialogHeader>
                         <DialogTitle>{editDoc ? 'แก้ไขเอกสาร' : `เพิ่มเอกสาร — ${deptName}`}</DialogTitle>
