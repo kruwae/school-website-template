@@ -304,7 +304,7 @@ export const DepartmentDocuments = ({ deptCode, deptName, color }: Props) => {
                         </div>
                     </div>
                 </div>
-                <Button onClick={openAdd} className="gap-2">
+                <Button onClick={openAdd} className="gap-2" disabled={loading || !!deptNotFound || !deptId}>
                     <Plus className="w-4 h-4" /> เพิ่มเอกสาร
                 </Button>
             </div>
@@ -467,7 +467,7 @@ export const DepartmentDocuments = ({ deptCode, deptName, color }: Props) => {
                     </div>
                     <DialogFooter>
                         <Button variant="outline" onClick={() => setShowDialog(false)}>ยกเลิก</Button>
-                        <Button onClick={handleSave}>{editDoc ? 'บันทึก' : 'เพิ่ม'}</Button>
+                        <Button onClick={handleSave} disabled={loading || !deptId || !!deptNotFound}>{editDoc ? 'บันทึก' : 'เพิ่ม'}</Button>
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
