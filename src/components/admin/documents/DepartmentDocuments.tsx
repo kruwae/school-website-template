@@ -108,8 +108,6 @@ export const DepartmentDocuments = ({ deptCode, deptName, color }: Props) => {
         return base;
     }, [categories, deptId, deptCode]);
 
-    useEffect(() => { fetchDeptAndDocs(); }, [deptCode, filterYear, filterCat]);
-
     const fetchDeptAndDocs = async () => {
         setLoading(true);
         setDeptNotFound(null);
@@ -179,6 +177,8 @@ export const DepartmentDocuments = ({ deptCode, deptName, color }: Props) => {
         } catch (e) { console.error(e); }
         finally { setLoading(false); }
     };
+
+    useEffect(() => { fetchDeptAndDocs(); }, [deptCode, filterYear, filterCat]);
 
     const filtered = useMemo(() => {
         return documents.filter(d => {
