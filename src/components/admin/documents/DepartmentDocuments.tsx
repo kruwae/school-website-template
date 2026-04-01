@@ -142,16 +142,26 @@ export const DepartmentDocuments = ({ deptCode, deptName, color }: Props) => {
     };
 
     const handleSave = async () => {
-        if (!form.title) { toast({ title: 'กรุณากรอกชื่อเอกสาร', variant: 'destructive' }); return; }
+        if (!form.title) {
+            toast({ title: 'กรุณากรอกชื่อเอกสาร', variant: 'destructive' });
+            return;
+        }
+
         const payload: any = {
             ...form,
             department_id: deptId,
             uploader_user_id: editDoc ? editDoc.uploader_user_id : (currentUser?.id || null),
         };
+
         try {
+            if (!deptId) {
+                throw new Error(`ไม่พบ department_id ของฝ่าย ${deptCode}`);
+            }
+
             if (editDoc) {
                 const { error } = await (supabase.from('documents' as any) as any)
-                    .update(payload).eq('id', editDoc.id);
+                    .update(payload)
+                    .eq('id', editDoc.id);
                 if (error) throw error;
                 toast({ title: 'อัปเดตสำเร็จ' });
             } else {
@@ -160,11 +170,19 @@ export const DepartmentDocuments = ({ deptCode, deptName, color }: Props) => {
                 if (error) throw error;
                 toast({ title: 'เพิ่มเอกสารสำเร็จ' });
             }
+
             setShowDialog(false);
             fetchDeptAndDocs();
         } catch (e: any) {
+            const message = String(e?.message || '');
             console.error('[handleSave] error:', e);
-            toast({ title: 'เกิดข้อผิดพลาด', description: e?.message || 'ไม่สามารถบันทึกได้', variant: 'destructive' });
+            toast({
+                title: 'เกิดข้อผิดพลาด',
+                description: message.includes('invalid input syntax for type uuid')
+                    ? 'ข้อมูลผู้ใช้หรือฝ่ายงานไม่ถูกต้อง กรุณาออกจากระบบแล้วเข้าสู่ระบบใหม่'
+                    : (message || 'ไม่สามารถบันทึกได้'),
+                variant: 'destructive'
+            });
         }
     };
 
