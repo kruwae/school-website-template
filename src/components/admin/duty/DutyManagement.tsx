@@ -883,9 +883,11 @@ export const DutyManagement = () => {
 
     const canSubmitForApproval = (record: DutyRecord, assignment?: DutyAssignment) => {
         if (!assignment || isPastDutyDate(assignment.duty_date)) return false;
-        const isUserOwnerOrFinal = isCurrentUserAssignedDuty(assignment) || isCurrentUserFinalDuty(record);
+        const isSwapRequester = record.swap_requested && record.swap_requested_by_user_id === currentUserId;
+        const isUserOwnerOrFinal = isCurrentUserAssignedDuty(assignment) || isCurrentUserFinalDuty(record) || isSwapRequester;
 
         if (!isUserOwnerOrFinal) return false;
+        // If requester is not the current user, they cannot submit approval for this swap flow
         if (record.swap_requested && record.swap_requested_by_user_id && record.swap_requested_by_user_id !== currentUserId) return false;
         if (record.status !== 'verified') return false;
         if (record.swap_requested && record.swap_response_status !== 'accepted') return false;
