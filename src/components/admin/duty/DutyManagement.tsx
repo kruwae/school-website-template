@@ -350,7 +350,8 @@ export const DutyManagement = () => {
             record?.swap_target_user_id === currentUserId ||
             record?.status === 'verified' ||
             record?.status === 'approved' ||
-            record?.status === 'recorded'
+            record?.status === 'recorded' ||
+            record?.swap_response_status === 'pending'
         );
     };
 
@@ -883,16 +884,19 @@ export const DutyManagement = () => {
 
     const canSubmitForApproval = (record: DutyRecord, assignment?: DutyAssignment) => {
         if (!assignment || isPastDutyDate(assignment.duty_date)) return false;
-        const isSwapRequester = record.swap_requested && record.swap_requested_by_user_id === currentUserId;
-        const isUserOwnerOrFinal = isCurrentUserAssignedDuty(assignment) || isCurrentUserFinalDuty(record) || isSwapRequester;
+        const isOwner = isCurrentUserAssignedDuty(assignment);
+        const isFinalDutyUser = isCurrentUserFinalDuty(record);
+        const isSwapRequester = !!record.swap_requested && record.swap_requested_by_user_id === currentUserId;
+        const isManager = isScheduleManager || canManageReports;
 
-        if (!isUserOwnerOrFinal) return false;
-        // If requester is not the current user, they cannot submit approval for this swap flow
-        if (record.swap_requested && record.swap_requested_by_user_id && record.swap_requested_by_user_id !== currentUserId) return false;
+        if (!record.swap_requested) {
+            return isOwner && record.status === 'verified' && record.approval_ready === false;
+        }
+
+        if (record.swap_response_status !== 'accepted') return false;
         if (record.status !== 'verified') return false;
-        if (record.swap_requested && record.swap_response_status !== 'accepted') return false;
-        if (record.approval_ready) return false; // already requested
-        return true;
+
+        return isSwapRequester || isFinalDutyUser || isManager;
     };
 
     const handleConfirmNoSwap = async (assignment: DutyAssignment) => {
@@ -1077,12 +1081,19 @@ export const DutyManagement = () => {
     const handleSubmitForApproval = async (record: DutyRecord) => {
         const assignment = assignments.find(item => item.id === record.assignment_id);
         if (!canSubmitForApproval(record, assignment)) {
-            toast({ title: 'ยังไม่สามารถส่งอนุมัติได้', description: 'ต้องตอบตกลงการเปลี่ยนเวรก่อน และวันเวรต้องยังไม่พ้นกำหนด', variant: 'destructive' });
+            toast({
+                title: 'ยังไม่สามารถส่งอนุมัติได้',
+                description: 'ต้องเป็นเจ้าของเวรหรือผู้ปฏิบัติเวรสุดท้าย และคำขอแลกเวรต้องได้รับการตอบตกลงแล้ว',
+                variant: 'destructive',
+            });
             return;
         }
 
         const { error } = await (supabase.from('duty_records' as any) as any)
-            .update({ approval_ready: true })
+            .update({
+                approval_ready: true,
+                status: 'verified',
+            })
             .eq('id', record.id);
 
         if (error) {
@@ -1090,13 +1101,17 @@ export const DutyManagement = () => {
             return;
         }
 
-        toast({ title: 'ส่งคำขออนุมัติเรียบร้อยแล้ว', description: 'รอหัวหน้ากิจการตรวจสอบและอนุมัติ', });
+        toast({ title: 'ส่งคำขออนุมัติเรียบร้อยแล้ว', description: 'รอหัวหน้ากิจการตรวจสอบและอนุมัติ' });
         fetchAll();
     };
 
     const canManageApproval = (record: DutyRecord) => {
         if (!record) return false;
         return (isScheduleManager || canManageReports) && record.status === 'verified' && record.approval_ready === true;
+    };
+
+    const canReturnApprovalToOwner = (record: DutyRecord) => {
+        return canManageApproval(record);
     };
 
     const handleApproveRecord = async (record: DutyRecord) => {
@@ -1125,7 +1140,13 @@ export const DutyManagement = () => {
         }
 
         const { error } = await (supabase.from('duty_records' as any) as any)
-            .update({ status: 'verified', approval_ready: false })
+            .update({
+                status: 'verified',
+                approval_ready: false,
+                final_duty_user_id: null,
+                final_duty_name: null,
+                final_duty_position: null,
+            })
             .eq('id', record.id);
 
         if (error) {
@@ -1133,16 +1154,15 @@ export const DutyManagement = () => {
             return;
         }
 
-        toast({ title: 'ปฏิเสธคำขออนุมัติแล้ว', description: 'ส่งกลับไปให้เจ้าของเวรแก้ไขและส่งคำขอใหม่', });
+        toast({ title: 'ปฏิเสธคำขออนุมัติแล้ว', description: 'ส่งกลับไปให้เจ้าของเวรแก้ไขและส่งคำขอใหม่' });
         fetchAll();
     };
 
     const getApprovalFlowState = (assignment: DutyAssignment, record?: DutyRecord) => {
         const isOwner = isCurrentUserAssignedDuty(assignment);
         const isSwapTarget = !!record?.swap_target_user_id && record.swap_target_user_id === currentUserId;
-          const isFinalDutyUser = !!record?.final_duty_user_id && record.final_duty_user_id === currentUserId;
-          const isManagerViewer = isScheduleManager || canManageReports;
-
+        const isFinalDutyUser = !!record?.final_duty_user_id && record.final_duty_user_id === currentUserId;
+        const isManagerViewer = isScheduleManager || canManageReports;
 
         const hasAcceptedSwap = record?.swap_requested && record?.swap_response_status === 'accepted';
         const finalDutyResolved = !!record?.final_duty_name;
@@ -1271,6 +1291,7 @@ export const DutyManagement = () => {
         const approvalFlow = getApprovalFlowState(assignment, record);
         const isCurrentUserSwappedTarget = !!record?.swap_target_user_id && record.swap_target_user_id === currentUserId;
         const isCurrentUserSwapRequester = !!record?.swap_requested_by_user_id && record.swap_requested_by_user_id === currentUserId;
+        const isManagerViewer = isScheduleManager || canManageReports;
 
         return (
             <Card key={assignment.id} className="border">
@@ -1367,6 +1388,19 @@ export const DutyManagement = () => {
                                         </Button>
                                     )}
 
+                                    {isCurrentUserSwapRelated(record) && record.swap_response_status === 'pending' && (
+                                        <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                                            คำขอเปลี่ยนเวรถูกส่งแล้ว แต่ปุ่ม “ตอบรับเปลี่ยนเวร” จะปรากฏเฉพาะผู้ที่ถูกขอเปลี่ยนเวรเท่านั้น
+                                        </div>
+                                    )}
+
+                                    {canRespondSwap(record, assignment) && (
+                                        <Button variant="secondary" size="sm" className="gap-2" onClick={() => openRespondDialog(record)}>
+                                            <CheckCheck className="w-4 h-4" />
+                                            ตอบรับเปลี่ยนเวร
+                                        </Button>
+                                    )}
+
                                     {canSubmitForApproval(record, assignment) && (
                                         <Button size="sm" className="gap-2" onClick={() => handleSubmitForApproval(record)}>
                                             <Send className="w-4 h-4" />
@@ -1379,6 +1413,15 @@ export const DutyManagement = () => {
                                             <Button size="sm" onClick={() => handleApproveRecord(record)} className="gap-2">
                                                 <CheckCheck className="w-4 h-4" />
                                                 อนุมัติ
+                                            </Button>
+                                            <Button
+                                                size="sm"
+                                                variant="secondary"
+                                                onClick={() => handleRejectRecord(record)}
+                                                className="gap-2"
+                                            >
+                                                <Edit2 className="w-4 h-4" />
+                                                แก้ไข/ส่งกลับ
                                             </Button>
                                             <Button size="sm" variant="destructive" onClick={() => handleRejectRecord(record)} className="gap-2">
                                                 <X className="w-4 h-4" />
@@ -1629,9 +1672,9 @@ export const DutyManagement = () => {
                                     { key: 'approved', label: 'อนุมัติแล้ว' },
                                     { key: 'recorded', label: 'บันทึกแล้ว' },
                                 ].map(opt => (
-                                    <Button
+                                        <Button
                                         key={opt.key}
-                                        size="xs"
+                                        size="sm"
                                         variant={calendarStatusFilter === opt.key ? 'default' : 'outline'}
                                         onClick={() => setCalendarStatusFilter(opt.key as any)}
                                     >
@@ -1737,10 +1780,10 @@ export const DutyManagement = () => {
                                 </div>
                                 <div className="flex items-center gap-2 text-sm">
                                     <span className="text-muted-foreground">สถานะกรอง:</span>
-                                    <Button size="xs" variant={calendarStatusFilter === 'all' ? 'default' : 'outline'} onClick={() => setCalendarStatusFilter('all')}>ทั้งหมด</Button>
-                                    <Button size="xs" variant={calendarStatusFilter === 'approval_ready' ? 'default' : 'outline'} onClick={() => setCalendarStatusFilter('approval_ready')}>รออนุมัติ</Button>
-                                    <Button size="xs" variant={calendarStatusFilter === 'approved' ? 'default' : 'outline'} onClick={() => setCalendarStatusFilter('approved')}>อนุมัติแล้ว</Button>
-                                    <Button size="xs" variant={calendarStatusFilter === 'recorded' ? 'default' : 'outline'} onClick={() => setCalendarStatusFilter('recorded')}>บันทึกแล้ว</Button>
+                                    <Button size="sm" variant={calendarStatusFilter === 'all' ? 'default' : 'outline'} onClick={() => setCalendarStatusFilter('all')}>ทั้งหมด</Button>
+                                    <Button size="sm" variant={calendarStatusFilter === 'approval_ready' ? 'default' : 'outline'} onClick={() => setCalendarStatusFilter('approval_ready')}>รออนุมัติ</Button>
+                                    <Button size="sm" variant={calendarStatusFilter === 'approved' ? 'default' : 'outline'} onClick={() => setCalendarStatusFilter('approved')}>อนุมัติแล้ว</Button>
+                                    <Button size="sm" variant={calendarStatusFilter === 'recorded' ? 'default' : 'outline'} onClick={() => setCalendarStatusFilter('recorded')}>บันทึกแล้ว</Button>
                                 </div>
                             </div>
 
@@ -2082,8 +2125,8 @@ export const DutyManagement = () => {
                                                     <div className="text-xs text-muted-foreground">{new Date(item.record.duty_date).toLocaleDateString('th-TH')}</div>
                                                 </div>
                                                 <div className="flex gap-2">
-                                                    <Button size="xs" onClick={() => handleApproveRecord(item.record)}>อนุมัติ</Button>
-                                                    <Button size="xs" variant="destructive" onClick={() => handleRejectRecord(item.record)}>ปฏิเสธ</Button>
+                                                    <Button size="sm" onClick={() => handleApproveRecord(item.record)}>อนุมัติ</Button>
+                                                    <Button size="sm" variant="destructive" onClick={() => handleRejectRecord(item.record)}>ปฏิเสธ</Button>
                                                 </div>
                                             </div>
                                         </div>
@@ -2103,7 +2146,7 @@ export const DutyManagement = () => {
                                                 <p className="text-sm font-medium">{item.title} • {item.ownerName}</p>
                                                 <p className="text-xs text-muted-foreground">{item.statusLabel} • {item.subtitle || 'ไม่มีหมายเหตุ'}</p>
                                             </div>
-                                            <Button size="xs" variant="outline" onClick={() => {
+                                            <Button size="sm" variant="outline" onClick={() => {
                                                 setSelectedCalendarItem(item);
                                                 setSelectedCalendarDate(null);
                                             }}>
