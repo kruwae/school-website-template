@@ -54,7 +54,7 @@ export const DepartmentDocuments = ({ deptCode, deptName, color }: Props) => {
     const currentUserName = currentUser?.full_name || '';
 
     const canSeeAllDocuments = currentUser
-? ['admin', 'director', 'deputy_director', 'dept_head', 'head_general', 'head_budget', 'head_personnel', 'head_student'].includes(currentUser.role)
+        ? ['admin', 'director', 'deputy_director', 'dept_head', 'head_general', 'head_budget', 'head_personnel', 'head_student'].includes(currentUser.role)
         : false;
 
     /** เจ้าของไฟล์หรือ admin เท่านั้นที่ลบได้ */
@@ -77,11 +77,6 @@ export const DepartmentDocuments = ({ deptCode, deptName, color }: Props) => {
         return [];
     }, [currentUser]);
 
-    const isCurrentDeptMember = useMemo(() => {
-        if (!deptId) return false;
-        return userDepartmentIds.includes(deptId);
-    }, [deptId, userDepartmentIds]);
-
     const [documents, setDocuments] = useState<Document[]>([]);
     const [categories, setCategories] = useState<Category[]>([]);
     const [deptId, setDeptId] = useState<string>('');
@@ -95,6 +90,11 @@ export const DepartmentDocuments = ({ deptCode, deptName, color }: Props) => {
         title: '', category_id: '', academic_year: '2568',
         status: 'submitted', file_url: '', file_name: '', uploader_name: currentUserName, description: '',
     });
+
+    const isCurrentDeptMember = useMemo(() => {
+        if (!deptId) return false;
+        return userDepartmentIds.includes(deptId);
+    }, [deptId, userDepartmentIds]);
 
     const categoryOptions = useMemo(() => {
         const base = categories.slice();
@@ -116,7 +116,6 @@ export const DepartmentDocuments = ({ deptCode, deptName, color }: Props) => {
             const normalizedCode = deptCode.startsWith('dept-') ? deptCode.replace(/^dept-/, '') : deptCode;
             const codeCandidates = [normalizedCode, `dept-${normalizedCode}`];
 
-            // 1) Try lookup by one of several accepted department_code values
             const deptByCode = await (supabase.from('departments' as any) as any)
                 .select('id, name, code')
                 .in('code', codeCandidates)
@@ -126,7 +125,6 @@ export const DepartmentDocuments = ({ deptCode, deptName, color }: Props) => {
                 deptData = deptByCode.data;
             }
 
-            // 2) If still not found, try lookup by Thai department name (loose match)
             if (!deptData && deptName) {
                 const deptByName = await (supabase.from('departments' as any) as any)
                     .select('id, name, code')
@@ -148,7 +146,7 @@ export const DepartmentDocuments = ({ deptCode, deptName, color }: Props) => {
             const id = deptData.id;
             setDeptId(id);
 
-            let docsQuery = (supabase.from('documents' as any) as any)
+            const docsQuery = (supabase.from('documents' as any) as any)
                 .select('*, document_categories(name)')
                 .eq('department_id', id)
                 .order('created_at', { ascending: false });
@@ -174,13 +172,15 @@ export const DepartmentDocuments = ({ deptCode, deptName, color }: Props) => {
                 if (!isMemberOfThisDept) {
                     docs = docs.filter((d: Document) => d.uploader_user_id === currentUser?.id);
                 }
-                // หากเป็นสมาชิกฝ่ายนี้, ให้ดูเอกสารทั้งหมดของฝ่ายนี้ได้
             }
 
             setDocuments(docs);
             if (catsRes.data) setCategories(catsRes.data);
-        } catch (e) { console.error(e); }
-        finally { setLoading(false); }
+        } catch (e) {
+            console.error(e);
+        } finally {
+            setLoading(false);
+        }
     };
 
     useEffect(() => { fetchDeptAndDocs(); }, [deptCode, filterYear, filterCat]);
@@ -215,7 +215,6 @@ export const DepartmentDocuments = ({ deptCode, deptName, color }: Props) => {
             if (existing) {
                 category_id = existing.id;
             } else {
-                // สร้างหมวดใหม่สำหรับ รายงานการปฏิบัติงาน เมื่อยังไม่มี
                 const { data: newCat, error: catError } = await (supabase.from('document_categories' as any) as any)
                     .insert({ name: 'รายงานการปฏิบัติงาน', department_id: deptId, order_position: categories.length + 1 })
                     .single();
