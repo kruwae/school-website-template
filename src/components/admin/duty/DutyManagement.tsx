@@ -488,7 +488,7 @@ export const DutyManagement = () => {
         ? assignments.find(a => a.id === selectedCalendarItem.id)
         : null;
     const selectedCalendarRecord = selectedCalendarItem
-        ? records.find(r => r.id === selectedCalendarItem.id)
+        ? records.find(r => r.id === selectedCalendarItem.id) || recordByAssignmentId.get(selectedCalendarItem.id)
         : null;
     const selectedCalendarAssignmentFromRecord = selectedCalendarRecord
         ? assignments.find(a => a.id === selectedCalendarRecord.assignment_id)
