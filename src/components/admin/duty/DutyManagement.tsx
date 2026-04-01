@@ -484,6 +484,22 @@ export const DutyManagement = () => {
         ? ((activeTab === 'records' ? recordCalendarItemsByDate : calendarItemsByDate).get(selectedCalendarDate) || [])
         : [];
 
+    const selectedCalendarAssignment = selectedCalendarItem
+        ? assignments.find(a => a.id === selectedCalendarItem.id)
+        : null;
+    const selectedCalendarRecord = selectedCalendarItem
+        ? records.find(r => r.id === selectedCalendarItem.id)
+        : null;
+    const selectedCalendarAssignmentFromRecord = selectedCalendarRecord
+        ? assignments.find(a => a.id === selectedCalendarRecord.assignment_id)
+        : null;
+
+    const detailAssignment = selectedCalendarAssignment || selectedCalendarAssignmentFromRecord;
+
+    const pendingApprovalItemsForSelectedDate = selectedCalendarDate
+        ? pendingApprovalItems.filter(item => item.record.duty_date === selectedCalendarDate)
+        : [];
+
     const dutyStatusOverview = useMemo(() => {
         const overview = {
             assignmentsScheduled: 0,
@@ -2053,6 +2069,26 @@ export const DutyManagement = () => {
 
                     {selectedCalendarDate && (
                         <div className="space-y-3">
+                            {(isScheduleManager || canManageReports) && pendingApprovalItemsForSelectedDate.length > 0 && (
+                                <div className="rounded-lg border border-yellow-300 bg-yellow-50 p-3">
+                                    <div className="font-semibold mb-2">สำหรับหัวหน้า: รายการที่ต้องอนุมัติเวร ({pendingApprovalItemsForSelectedDate.length})</div>
+                                    {pendingApprovalItemsForSelectedDate.map(item => (
+                                        <div key={item.record.id} className="rounded-lg border border-yellow-200 bg-white p-2 mb-2">
+                                            <div className="flex justify-between items-center gap-2">
+                                                <div>
+                                                    <div className="text-sm font-medium">{item.assignment?.assigned_name || 'ไม่มีผู้รับเวร'} • {item.record.duty_shift_label}</div>
+                                                    <div className="text-xs text-muted-foreground">{new Date(item.record.duty_date).toLocaleDateString('th-TH')}</div>
+                                                </div>
+                                                <div className="flex gap-2">
+                                                    <Button size="xs" onClick={() => handleApproveRecord(item.record)}>อนุมัติ</Button>
+                                                    <Button size="xs" variant="destructive" onClick={() => handleRejectRecord(item.record)}>ปฏิเสธ</Button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+
                             {selectedCalendarDateItems.map(item => {
                                 const record = filteredRecords.find(r => r.id === item.id);
                                 const assignment = record ? assignments.find(a => a.id === record.assignment_id) : undefined;
@@ -2102,6 +2138,30 @@ export const DutyManagement = () => {
                                 <div className="text-sm"><strong>สถานะ:</strong> {selectedCalendarItem.statusLabel}</div>
                                 <div className="text-sm"><strong>ค่าความพร้อมอนุมัติ:</strong> {selectedCalendarItem.approvalReady ? 'พร้อม' : 'ยังไม่พร้อม'}</div>
                                 <div className="text-sm"><strong>สถานะเปลี่ยนเวร:</strong> {SWAP_STATUS_MAP[selectedCalendarItem.swapResponseStatus || 'not_required'] || selectedCalendarItem.swapResponseStatus}</div>
+                            </div>
+
+                            <div className="flex flex-wrap gap-2">
+                                {detailAssignment && canConfirmNoSwap(detailAssignment, selectedCalendarRecord || undefined) && (
+                                    <Button size="sm" onClick={() => handleConfirmNoSwap(detailAssignment)}>
+                                        ตกลง
+                                    </Button>
+                                )}
+                                {detailAssignment && canRequestSwap(detailAssignment, selectedCalendarRecord || undefined) && (
+                                    <Button size="sm" variant="outline" onClick={() => openSwapDialog(detailAssignment)}>
+                                        แลกเวร
+                                    </Button>
+                                )}
+                                {selectedCalendarRecord && canRespondSwap(selectedCalendarRecord, detailAssignment || undefined) && (
+                                    <Button size="sm" variant="secondary" onClick={() => openRespondDialog(selectedCalendarRecord)}>
+                                        รับแลกเวร
+                                    </Button>
+                                )}
+                                {selectedCalendarRecord && canManageApproval(selectedCalendarRecord) && (
+                                    <>
+                                        <Button size="sm" onClick={() => handleApproveRecord(selectedCalendarRecord)}>อนุมัติ</Button>
+                                        <Button size="sm" variant="destructive" onClick={() => handleRejectRecord(selectedCalendarRecord)}>ปฏิเสธ</Button>
+                                    </>
+                                )}
                             </div>
                         </div>
                     )}
