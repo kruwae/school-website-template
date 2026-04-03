@@ -7,6 +7,7 @@ import { getCurrentUser, type UserRole } from '@/lib/auth';
 // =============================================
 export const ALL_MENU_IDS = [
   'dashboard',
+  'budget-dashboard',
   'news',
   'projects',
   'dept-academic',
@@ -38,7 +39,7 @@ export const DEFAULT_ROLE_MENUS: Record<UserRole, Set<string>> = {
 
   // ผอ. เห็นเกือบทุกเมนู ยกเว้น settings และ user-menu-control
   director: new Set([
-    'dashboard', 'news', 'projects',
+    'dashboard', 'budget-dashboard', 'news', 'projects',
     'dept-academic', 'dept-general', 'dept-budget', 'dept-personnel', 'dept-student',
     'documents', 'duty', 'leave', 'maintenance',
     'audit-teacher', 'audit-committee',
@@ -47,7 +48,7 @@ export const DEFAULT_ROLE_MENUS: Record<UserRole, Set<string>> = {
 
   // รองผอ. เห็นเกือบทั้งหมด ยกเว้น settings/user-menu-control
   deputy_director: new Set([
-    'dashboard', 'news', 'projects',
+    'dashboard', 'budget-dashboard', 'news', 'projects',
     'dept-academic', 'dept-general', 'dept-budget', 'dept-personnel', 'dept-student',
     'documents', 'duty', 'leave', 'maintenance',
     'audit-teacher', 'audit-committee',
@@ -56,31 +57,31 @@ export const DEFAULT_ROLE_MENUS: Record<UserRole, Set<string>> = {
 
   // หัวหน้าฝ่าย/งาน เห็นฝ่ายของตน + งานประจำวัน + ประเมินครู
   dept_head: new Set([
-    'dashboard', 'news', 'projects',
+    'dashboard', 'budget-dashboard', 'news', 'projects',
     'dept-academic', 'dept-general', 'dept-budget', 'dept-personnel', 'dept-student',
     'documents', 'duty', 'leave', 'maintenance',
     'audit-teacher',
   ]),
   head_general: new Set([
-    'dashboard', 'news', 'projects',
+    'dashboard', 'budget-dashboard', 'news', 'projects',
     'dept-academic', 'dept-general', 'dept-budget', 'dept-personnel', 'dept-student',
     'documents', 'duty', 'leave', 'maintenance',
     'audit-teacher',
   ]),
   head_budget: new Set([
-    'dashboard', 'news', 'projects',
+    'dashboard', 'budget-dashboard', 'news', 'projects',
     'dept-academic', 'dept-general', 'dept-budget', 'dept-personnel', 'dept-student',
     'documents', 'duty', 'leave', 'maintenance',
     'audit-teacher',
   ]),
   head_personnel: new Set([
-    'dashboard', 'news', 'projects',
+    'dashboard', 'budget-dashboard', 'news', 'projects',
     'dept-academic', 'dept-general', 'dept-budget', 'dept-personnel', 'dept-student',
     'documents', 'duty', 'leave', 'maintenance',
     'audit-teacher',
   ]),
   head_student: new Set([
-    'dashboard', 'news', 'projects',
+    'dashboard', 'budget-dashboard', 'news', 'projects',
     'dept-academic', 'dept-general', 'dept-budget', 'dept-personnel', 'dept-student',
     'documents', 'duty', 'leave', 'maintenance',
     'audit-teacher',

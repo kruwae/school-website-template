@@ -82,6 +82,7 @@ const allMenuGroups: MenuGroup[] = [
         label: 'ภาพรวม',
         items: [
             { id: 'dashboard', label: 'แดชบอร์ด', icon: LayoutDashboard, path: '/admin/dashboard' },
+            { id: 'budget-dashboard', label: 'แดชบอร์ดงบประมาณ', icon: DollarSign, path: '/admin/dashboard?tab=budget-dashboard' },
             { id: 'news', label: 'ประกาศ/ข่าวสาร', icon: Newspaper, path: '/admin/dashboard?tab=news' },
             { id: 'projects', label: 'จัดการโครงการ', icon: Target, path: '/admin/dashboard?tab=projects' },
         ]
