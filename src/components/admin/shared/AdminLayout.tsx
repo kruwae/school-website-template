@@ -83,6 +83,7 @@ const allMenuGroups: MenuGroup[] = [
         items: [
             { id: 'dashboard', label: 'แดชบอร์ด', icon: LayoutDashboard, path: '/admin/dashboard' },
             { id: 'news', label: 'ประกาศ/ข่าวสาร', icon: Newspaper, path: '/admin/dashboard?tab=news' },
+            { id: 'projects', label: 'จัดการโครงการ', icon: Target, path: '/admin/dashboard?tab=projects' },
         ]
     },
     {
@@ -99,7 +100,6 @@ const allMenuGroups: MenuGroup[] = [
         label: 'งานประจำวัน',
         items: [
             { id: 'documents', label: 'คลังเอกสารทั้งหมด', icon: FileText, path: '/admin/dashboard?tab=documents' },
-            { id: 'projects', label: 'จัดการโครงการ', icon: Target, path: '/admin/dashboard?tab=projects' },
             { id: 'duty', label: 'บันทึกเวร', icon: CalendarCheck, path: '/admin/dashboard?tab=duty' },
             { id: 'leave', label: 'ใบลา', icon: ClipboardList, path: '/admin/dashboard?tab=leave' },
             { id: 'maintenance', label: 'แจ้งซ่อม', icon: Wrench, path: '/admin/dashboard?tab=maintenance' },
