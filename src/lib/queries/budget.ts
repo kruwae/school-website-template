@@ -196,7 +196,30 @@ export const getAllProjectsBudgetSummary = async (): Promise<ProjectBudgetSummar
     .select('*')
     .order('project_title');
 
-  if (error) throw error;
+  if (error) {
+    console.warn('project_budget_summary view unavailable, falling back to projects table:', error);
+
+    const fallback = await supabase
+      .from('projects')
+      .select('id, title, status, budget_amount, budget_used')
+      .order('title');
+
+    if (fallback.error) {
+      throw fallback.error;
+    }
+
+    return (fallback.data || []).map((project: any): ProjectBudgetSummary => ({
+      project_id: project.id,
+      project_title: project.title,
+      project_status: project.status,
+      total_planned: Number(project.budget_amount) || 0,
+      total_used: Number(project.budget_used) || 0,
+      remaining_budget: (Number(project.budget_amount) || 0) - (Number(project.budget_used) || 0),
+      budget_items_count: 0,
+      transactions_count: 0
+    }));
+  }
+
   return data || [];
 };
 
