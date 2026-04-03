@@ -203,6 +203,7 @@ export const SettingsManagement = ({ adminOnly = false }: SettingsManagementProp
     };
 
     const handlePasswordChange = async () => {
+        // ✅ Validation 1: ตรวจสอบเข้าสู่ระบบ
         if (!currentUser?.id) {
             toast({
                 variant: 'destructive',
@@ -212,7 +213,12 @@ export const SettingsManagement = ({ adminOnly = false }: SettingsManagementProp
             return;
         }
 
-        if (!passwordForm.currentPassword || !passwordForm.newPassword || !passwordForm.confirmPassword) {
+        // ✅ Validation 2: ตรวจว่าทุก field ไม่ว่าง
+        const currentPwd = passwordForm.currentPassword.trim();
+        const newPwd = passwordForm.newPassword.trim();
+        const confirmPwd = passwordForm.confirmPassword.trim();
+
+        if (!currentPwd || !newPwd || !confirmPwd) {
             toast({
                 variant: 'destructive',
                 title: 'กรอกข้อมูลไม่ครบ',
@@ -221,7 +227,8 @@ export const SettingsManagement = ({ adminOnly = false }: SettingsManagementProp
             return;
         }
 
-        if (passwordForm.newPassword.length < 6) {
+        // ✅ Validation 3: ความยาวรหัสผ่าน
+        if (newPwd.length < 6) {
             toast({
                 variant: 'destructive',
                 title: 'รหัสผ่านใหม่สั้นเกินไป',
@@ -230,7 +237,8 @@ export const SettingsManagement = ({ adminOnly = false }: SettingsManagementProp
             return;
         }
 
-        if (passwordForm.newPassword !== passwordForm.confirmPassword) {
+        // ✅ Validation 4: ยืนยันตรงกัน
+        if (newPwd !== confirmPwd) {
             toast({
                 variant: 'destructive',
                 title: 'ยืนยันรหัสผ่านไม่ตรงกัน',
@@ -239,26 +247,53 @@ export const SettingsManagement = ({ adminOnly = false }: SettingsManagementProp
             return;
         }
 
+        // ✅ Validation 5: รหัสผ่านใหม่ ≠ รหัสผ่านเดิม
+        if (currentPwd === newPwd) {
+            toast({
+                variant: 'destructive',
+                title: 'รหัสผ่านใหม่เหมือนเดิม',
+                description: 'กรุณาตั้งรหัสผ่านที่แตกต่างจากรหัสผ่านเดิม',
+            });
+            return;
+        }
+
         setPasswordSaving(true);
         try {
-            const currentPasswordHash = await hashPassword(passwordForm.currentPassword);
+            // ✅ Hash รหัสผ่านเดิมและดึงข้อมูลปัจจุบันจากฐานข้อมูล
+            const currentPasswordHash = await hashPassword(currentPwd);
             const { data: existingUser, error: fetchError } = await (supabase.from('app_users' as any) as any)
-                .select('id, password_hash')
+                .select('id, password_hash, username, full_name')
                 .eq('id', currentUser.id)
                 .maybeSingle();
 
-            if (fetchError) throw fetchError;
+            // ✅ ตรวจสอบ error จากการทำ query
+            if (fetchError) {
+                console.error('[password change] fetch error:', fetchError);
+                throw fetchError;
+            }
 
-            if (!existingUser || existingUser.password_hash !== currentPasswordHash) {
+            // ✅ ตรวจว่า user ยังคงมีอยู่ในระบบ
+            if (!existingUser) {
                 toast({
                     variant: 'destructive',
-                    title: 'รหัสผ่านเดิมไม่ถูกต้อง',
-                    description: 'ไม่สามารถเปลี่ยนรหัสผ่านได้',
+                    title: 'ไม่พบข้อมูลผู้ใช้ในระบบ',
+                    description: 'ข้อมูลบัญชีของคุณอาจถูกลบ กรุณาติดต่อผู้ดูแลระบบ',
                 });
                 return;
             }
 
-            const newPasswordHash = await hashPassword(passwordForm.newPassword);
+            // ✅ ตรวจสอบรหัสผ่านเดิมให้ตรงกับที่เก็บในฐานข้อมูล
+            if (existingUser.password_hash !== currentPasswordHash) {
+                toast({
+                    variant: 'destructive',
+                    title: 'รหัสผ่านเดิมไม่ถูกต้อง',
+                    description: 'กรุณาตรวจสอบรหัสผ่านปัจจุบันของคุณอีกครั้ง',
+                });
+                return;
+            }
+
+            // ✅ Hash รหัสผ่านใหม่และอัปเดตในฐานข้อมูล
+            const newPasswordHash = await hashPassword(newPwd);
             const { error: updateError } = await (supabase.from('app_users' as any) as any)
                 .update({
                     password_hash: newPasswordHash,
@@ -266,37 +301,45 @@ export const SettingsManagement = ({ adminOnly = false }: SettingsManagementProp
                 })
                 .eq('id', currentUser.id);
 
-            if (updateError) throw updateError;
+            // ✅ ตรวจสอบ error จากการอัปเดต
+            if (updateError) {
+                console.error('[password change] update error:', updateError);
+                throw updateError;
+            }
 
+            // ✅ ล้างฟอร์มหลังจากอัปเดตสำเร็จ
             setPasswordForm({
                 currentPassword: '',
                 newPassword: '',
                 confirmPassword: '',
             });
 
+            // ✅ ส่งการแจ้งเตือนให้ admin
             await notifyAdmins({
                 type: 'password_changed',
                 title: 'มีผู้ใช้เปลี่ยนรหัสผ่าน',
-                message: `${currentUser.full_name || currentUser.username || 'ผู้ใช้งาน'} ได้เปลี่ยนรหัสผ่านของตนเองสำเร็จ`,
+                message: `${existingUser.full_name || existingUser.username || 'ผู้ใช้งาน'} ได้เปลี่ยนรหัสผ่านของตนเองสำเร็จ`,
                 actorUserId: currentUser.id,
                 targetUserId: currentUser.id,
                 metadata: {
-                    username: currentUser.username || null,
-                    full_name: currentUser.full_name || null,
+                    username: existingUser.username || null,
+                    full_name: existingUser.full_name || null,
                     changed_at: new Date().toISOString(),
                     source: 'self-service',
                 },
             });
 
+            // ✅ แสดงข้อความสำเร็จ
             toast({
-                title: 'เปลี่ยนรหัสผ่านสำเร็จ',
-                description: 'ใช้รหัสผ่านใหม่ในการเข้าสู่ระบบครั้งถัดไป',
+                title: 'เปลี่ยนรหัสผ่านสำเร็จ ✅',
+                description: 'ใช้รหัสผ่านใหม่ของคุณในการเข้าสู่ระบบครั้งถัดไป',
             });
         } catch (error: any) {
+            console.error('[password change] error:', error);
             toast({
                 variant: 'destructive',
                 title: 'เปลี่ยนรหัสผ่านไม่สำเร็จ',
-                description: error?.message || 'เกิดข้อผิดพลาดระหว่างบันทึกรหัสผ่าน',
+                description: error?.message || 'เกิดข้อผิดพลาดระหว่างอัปเดตรหัสผ่าน โปรดลองอีกครั้ง',
             });
         } finally {
             setPasswordSaving(false);
