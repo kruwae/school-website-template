@@ -30,18 +30,11 @@ ALTER COLUMN code SET NOT NULL,
 ADD CONSTRAINT document_categories_code_unique UNIQUE (code);
 
 -- =============================================
--- 2. ADD PROJECTS MENU PERMISSIONS
+-- 2. ADD PROJECTS MENU PERMISSIONS (REMOVED - table schema mismatch)
 -- =============================================
 
--- Add projects menu to user menu permissions if not exists
-INSERT INTO public.user_menu_permissions (menu_id, menu_name, menu_path, required_roles, is_active)
-VALUES
-  ('projects', 'จัดการโครงการ', '/admin/dashboard?tab=projects', ARRAY['admin', 'director', 'deputy_director', 'dept_head'], true)
-ON CONFLICT (menu_id) DO UPDATE SET
-  menu_name = EXCLUDED.menu_name,
-  menu_path = EXCLUDED.menu_path,
-  required_roles = EXCLUDED.required_roles,
-  is_active = EXCLUDED.is_active;
+-- Note: user_menu_permissions table has different schema (user-specific permissions)
+-- Menu configuration is handled in AdminLayout.tsx component instead
 
 -- =============================================
 -- 3. ENSURE PROJECTS TABLE HAS PROPER DEFAULTS
