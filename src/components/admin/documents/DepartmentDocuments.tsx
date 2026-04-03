@@ -106,8 +106,8 @@ export const DepartmentDocuments = ({ deptCode, deptName, color }: Props) => {
                 department_id: deptId || '',
             });
         }
-        // เพิ่มหมวด "โครงการ" สำหรับฝ่ายบริหารทั่วไป
-        if (deptCode === 'general' && !base.some(c => c.name === 'โครงการ')) {
+        // เพิ่มหมวด "โครงการ" สำหรับทุกฝ่ายงาน
+        if (!base.some(c => c.name === 'โครงการ')) {
             base.unshift({
                 id: `special-project-${deptId || deptCode}`,
                 name: 'โครงการ',
