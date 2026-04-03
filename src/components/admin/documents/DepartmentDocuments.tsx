@@ -228,16 +228,20 @@ export const DepartmentDocuments = ({ deptCode, deptName, color }: Props) => {
         }
 
         let category_id = form.category_id;
-        if (category_id.startsWith('special-work-report-')) {
-            const existing = categories.find(c => c.name === 'รายงานการปฏิบัติงาน');
+        if (category_id.startsWith('special-work-report-') || category_id.startsWith('special-project-')) {
+            const isProject = category_id.startsWith('special-project-');
+            const expectedName = isProject ? 'โครงการ' : 'รายงานการปฏิบัติงาน';
+            const expectedCode = isProject ? `project-${deptCode.replace(/^dept-/, '')}` : `work-report-${deptCode.replace(/^dept-/, '')}`;
+
+            const existing = categories.find(c => c.name === expectedName);
             if (existing) {
                 category_id = existing.id;
             } else {
                 try {
                     const { data: insertedRows, error: catError } = await (supabase.from('document_categories' as any) as any)
                         .insert([{
-                            code: `work-report-${deptCode.replace(/^dept-/, '')}`,
-                            name: 'รายงานการปฏิบัติงาน',
+                            code: expectedCode,
+                            name: expectedName,
                             department_id: deptId,
                             order_position: categories.length + 1,
                         }])
@@ -245,9 +249,8 @@ export const DepartmentDocuments = ({ deptCode, deptName, color }: Props) => {
                         .single();
 
                     if (catError) throw catError;
-
                     if (!insertedRows?.id) {
-                        throw new Error('ไม่สามารถสร้างหมวดหมู่รายงานการปฏิบัติงานได้');
+                        throw new Error(`ไม่สามารถสร้างหมวดหมู่${expectedName}ได้`);
                     }
 
                     category_id = insertedRows.id;
@@ -259,7 +262,7 @@ export const DepartmentDocuments = ({ deptCode, deptName, color }: Props) => {
                     console.error('[handleSave] create category error:', catError);
                     toast({
                         title: 'เกิดข้อผิดพลาด',
-                        description: catError?.message || 'ไม่สามารถสร้างหมวดหมู่รายงานการปฏิบัติงานได้',
+                        description: catError?.message || `ไม่สามารถสร้างหมวดหมู่${expectedName}ได้`,
                         variant: 'destructive',
                     });
                     return;
