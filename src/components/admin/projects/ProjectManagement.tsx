@@ -33,6 +33,7 @@ interface Project {
     status_label: string;
     start_date: string;
     end_date: string;
+    responsible_person_id: string;
     responsible_person_name: string;
     department_id: string;
     academic_year: string;
@@ -188,7 +189,7 @@ export const ProjectManagement = () => {
             status: project.status,
             start_date: project.start_date || '',
             end_date: project.end_date || '',
-            responsible_person_id: '', // Need to lookup from responsible_person_name
+            responsible_person_id: project.responsible_person_id || '',
             department_id: project.department_id,
             academic_year: project.academic_year,
             objectives: project.objectives || [''],
@@ -211,11 +212,13 @@ export const ProjectManagement = () => {
 
         setSaving(true);
         try {
-            const responsiblePerson = appUsers.find(u => u.id === form.responsible_person_id);
+            const responsiblePerson = form.responsible_person_id ? appUsers.find(u => u.id === form.responsible_person_id) : null;
             const projectData = {
                 ...form,
                 budget_amount: form.budget_amount ? parseFloat(form.budget_amount) : null,
-                responsible_person_name: responsiblePerson?.full_name || '',
+                start_date: form.start_date || null,
+                end_date: form.end_date || null,
+                responsible_person_name: responsiblePerson ? responsiblePerson.full_name : '',
                 created_by_id: currentUser?.id,
                 created_by_name: currentUser?.full_name,
                 objectives: form.objectives.filter(obj => obj.trim()),
@@ -437,8 +440,8 @@ export const ProjectManagement = () => {
                                             <div>
                                                 <span className="text-muted-foreground">ระยะเวลา:</span>
                                                 <p className="font-medium">
-                                                    {project.start_date && project.end_date
-                                                        ? `${new Date(project.start_date).toLocaleDateString('th-TH')} - ${new Date(project.end_date).toLocaleDateString('th-TH')}`
+                                                    {project.start_date || project.end_date
+                                                        ? `${project.start_date ? new Date(project.start_date).toLocaleDateString('th-TH') : ''}${project.start_date && project.end_date ? ' - ' : ''}${project.end_date ? new Date(project.end_date).toLocaleDateString('th-TH') : ''}`
                                                         : '-'
                                                     }
                                                 </p>
