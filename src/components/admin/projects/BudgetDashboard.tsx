@@ -75,10 +75,6 @@ export const BudgetDashboard: React.FC = () => {
     return <div className="flex justify-center p-8">กำลังโหลดแดชบอร์ด...</div>;
   }
 
-  if (!stats) {
-    return <div className="flex justify-center p-8">ไม่พบข้อมูล</div>;
-  }
-
   return (
     <div className="space-y-6">
       {/* Header */}

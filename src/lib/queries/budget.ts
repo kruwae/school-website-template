@@ -201,19 +201,72 @@ export const getAllProjectsBudgetSummary = async (): Promise<ProjectBudgetSummar
 };
 
 export const getBudgetDashboardStats = async (): Promise<BudgetDashboardStats> => {
-  // Get summary stats
-  const { data: summary, error: summaryError } = await supabase
-    .from('project_budget_summary')
-    .select('total_planned, total_used, remaining_budget');
+  // Try standard aggregated view first
+  let summary: Array<{ total_planned: number; total_used: number; remaining_budget: number }> = [];
+  let summaryError = null;
 
-  if (summaryError) throw summaryError;
+  try {
+    const response = await supabase
+      .from('project_budget_summary')
+      .select('total_planned, total_used, remaining_budget');
 
-  const totalBudgetAllocated = summary?.reduce((sum, item) => sum + (item.total_planned || 0), 0) || 0;
-  const totalBudgetUsed = summary?.reduce((sum, item) => sum + (item.total_used || 0), 0) || 0;
-  const totalBudgetRemaining = summary?.reduce((sum, item) => sum + (item.remaining_budget || 0), 0) || 0;
-  const projectsOverBudget = summary?.filter(item => (item.remaining_budget || 0) < 0).length || 0;
+    if (response.error) {
+      throw response.error;
+    }
+    summary = response.data || [];
+  } catch (error: any) {
+    summaryError = error;
+    console.warn('project_budget_summary not available or failed:', error?.message || error);
+  }
 
-  // Get recent transactions
+  // Fallback when summary view isn't available
+  if (!summary || summary.length === 0) {
+    const projectResp = await supabase
+      .from('projects')
+      .select(`
+        id,
+        budget_amount,
+        budget_used
+      `);
+
+    if (projectResp.error) {
+      throw projectResp.error;
+    }
+
+    const projects = projectResp.data || [];
+    const totalBudgetAllocated = projects.reduce((sum: number, item: any) => sum + (Number(item.budget_amount) || 0), 0);
+    const totalBudgetUsed = projects.reduce((sum: number, item: any) => sum + (Number(item.budget_used) || 0), 0);
+    const totalBudgetRemaining = totalBudgetAllocated - totalBudgetUsed;
+    const projectsOverBudget = projects.filter((item: any) => (Number(item.budget_used) || 0) > (Number(item.budget_amount) || 0)).length;
+
+    const { data: recentTransactions, error: transactionsError } = await supabase
+      .from('budget_transactions')
+      .select(`
+        *,
+        budget_item:project_budget_items(item_name, category:budget_categories(name)),
+        created_by_user:app_users(name),
+        project:projects(title)
+      `)
+      .order('created_at', { ascending: false })
+      .limit(10);
+
+    if (transactionsError) throw transactionsError;
+
+    return {
+      total_projects: projects.length,
+      total_budget_allocated: totalBudgetAllocated,
+      total_budget_used: totalBudgetUsed,
+      total_budget_remaining: totalBudgetRemaining,
+      projects_over_budget: projectsOverBudget,
+      recent_transactions: recentTransactions || []
+    };
+  }
+
+  const totalBudgetAllocated = summary.reduce((sum, item) => sum + (item.total_planned || 0), 0);
+  const totalBudgetUsed = summary.reduce((sum, item) => sum + (item.total_used || 0), 0);
+  const totalBudgetRemaining = summary.reduce((sum, item) => sum + (item.remaining_budget || 0), 0);
+  const projectsOverBudget = summary.filter(item => (item.remaining_budget || 0) < 0).length;
+
   const { data: recentTransactions, error: transactionsError } = await supabase
     .from('budget_transactions')
     .select(`
@@ -228,7 +281,7 @@ export const getBudgetDashboardStats = async (): Promise<BudgetDashboardStats> =
   if (transactionsError) throw transactionsError;
 
   return {
-    total_projects: summary?.length || 0,
+    total_projects: summary.length,
     total_budget_allocated: totalBudgetAllocated,
     total_budget_used: totalBudgetUsed,
     total_budget_remaining: totalBudgetRemaining,
