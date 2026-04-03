@@ -31,8 +31,17 @@ import {
 
 export const BudgetDashboard: React.FC = () => {
   const { toast } = useToast();
+  const emptyStats: BudgetDashboardStats = {
+    total_projects: 0,
+    total_budget_allocated: 0,
+    total_budget_used: 0,
+    total_budget_remaining: 0,
+    projects_over_budget: 0,
+    recent_transactions: []
+  };
+
   const [loading, setLoading] = useState(true);
-  const [stats, setStats] = useState<BudgetDashboardStats | null>(null);
+  const [stats, setStats] = useState<BudgetDashboardStats>(emptyStats);
   const [projectsSummary, setProjectsSummary] = useState<ProjectBudgetSummary[]>([]);
   const [recentTransactions, setRecentTransactions] = useState<BudgetTransaction[]>([]);
 
