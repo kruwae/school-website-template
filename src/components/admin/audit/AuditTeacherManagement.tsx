@@ -39,6 +39,7 @@ const DOC_TYPE_LABELS: Record<string, string> = {
     self_evaluation: 'แบบประเมินตนเอง',
     teaching_plan:   'แผนการจัดการเรียนรู้',
     work_evidence:   'หลักฐานการปฏิบัติงาน',
+    project:         'โครงการ',
     other:           'เอกสารอื่นๆ',
 };
 

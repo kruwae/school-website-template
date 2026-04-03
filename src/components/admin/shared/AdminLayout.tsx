@@ -24,6 +24,7 @@ import {
     Shield,
     Loader2,
     Menu,
+    Target,
 } from 'lucide-react';
 import { getCurrentUser, logout } from '@/lib/auth';
 import {
@@ -98,6 +99,7 @@ const allMenuGroups: MenuGroup[] = [
         label: 'งานประจำวัน',
         items: [
             { id: 'documents', label: 'คลังเอกสารทั้งหมด', icon: FileText, path: '/admin/dashboard?tab=documents' },
+            { id: 'projects', label: 'จัดการโครงการ', icon: Target, path: '/admin/dashboard?tab=projects' },
             { id: 'duty', label: 'บันทึกเวร', icon: CalendarCheck, path: '/admin/dashboard?tab=duty' },
             { id: 'leave', label: 'ใบลา', icon: ClipboardList, path: '/admin/dashboard?tab=leave' },
             { id: 'maintenance', label: 'แจ้งซ่อม', icon: Wrench, path: '/admin/dashboard?tab=maintenance' },

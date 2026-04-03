@@ -28,6 +28,7 @@ const DOC_TYPES = [
     { value: 'self_evaluation', label: 'แบบประเมินตนเอง' },
     { value: 'teaching_plan', label: 'แผนการจัดการเรียนรู้' },
     { value: 'work_evidence', label: 'หลักฐานการปฏิบัติงาน' },
+    { value: 'project', label: 'โครงการ' },
     { value: 'other', label: 'เอกสารอื่นๆ' },
 ];
 

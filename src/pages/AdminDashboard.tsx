@@ -13,6 +13,7 @@ import { AuditTeacherManagement } from '@/components/admin/audit/AuditTeacherMan
 import { AuditCommitteeManagement } from '@/components/admin/audit/AuditCommitteeManagement';
 import { DepartmentDocuments } from '@/components/admin/documents/DepartmentDocuments';
 import { UserMenuControl } from '@/components/admin/users/UserMenuControl';
+import { ProjectManagement } from '@/components/admin/projects/ProjectManagement';
 import { Card, CardContent } from '@/components/ui/card';
 import {
     BookOpen, Building2, DollarSign, Users, GraduationCap,
@@ -99,6 +100,7 @@ const AdminDashboard = () => {
             case 'administrators':     return <AdministratorsManagement />;
             case 'settings':           return <SettingsManagement adminOnly={currentUser?.role !== 'admin'} />;
             case 'user-menu-control':  return <UserMenuControl />;
+            case 'projects':           return <ProjectManagement />;
 
             case 'dashboard':
                 return (
