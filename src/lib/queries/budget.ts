@@ -343,3 +343,62 @@ export const getFilteredBudgetTransactions = async (filters: BudgetReportFilters
   if (error) throw error;
   return data || [];
 };
+
+// =============================================
+// BUDGET HELPER FUNCTIONS (ใช้ functions ใหม่จาก migration 023)
+// =============================================
+
+export const getProjectRemainingBudget = async (projectId: string): Promise<number> => {
+  const { data, error } = await supabase
+    .rpc('get_project_remaining_budget', { 
+      project_uuid: projectId 
+    });
+
+  if (error) throw error;
+  return Number(data) || 0;
+};
+
+export const getBudgetUtilizationPercentage = async (projectId: string): Promise<number> => {
+  const { data, error } = await supabase
+    .rpc('get_budget_utilization_percentage', { 
+      project_uuid: projectId 
+    });
+
+  if (error) throw error;
+  return Number(data) || 0;
+};
+
+export const getCategorySummary = async (projectId: string): Promise<any[]> => {
+  const { data, error } = await supabase
+    .rpc('get_category_summary', { 
+      project_uuid: projectId 
+    });
+
+  if (error) throw error;
+  return data || [];
+};
+
+export const canCreateExpense = async (projectId: string, amount: number): Promise<boolean> => {
+  const { data, error } = await supabase
+    .rpc('can_create_expense', { 
+      project_uuid: projectId,
+      amount_to_spend: amount
+    });
+
+  if (error) {
+    console.warn('canCreateExpense error:', error);
+    return false;
+  }
+  return Boolean(data);
+};
+
+export const getBudgetStatistics = async (projectId: string): Promise<any> => {
+  const { data, error } = await supabase
+    .rpc('get_budget_statistics', { 
+      project_uuid: projectId 
+    });
+
+  if (error) throw error;
+  return data;
+};
+};

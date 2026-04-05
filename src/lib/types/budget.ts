@@ -110,3 +110,34 @@ export interface BudgetReportFilters {
   date_to?: string;
   transaction_type?: 'expense' | 'refund' | 'adjustment';
 }
+
+// =============================================
+// BUDGET STATISTICS TYPES
+// =============================================
+
+export interface BudgetStatistics {
+  total_budget: number;
+  total_spent: number;
+  total_refunded: number;
+  net_spent: number;
+  remaining_budget: number;
+  budget_items_count: number;
+  transactions_count: number;
+  expense_transactions_count: number;
+  refund_transactions_count: number;
+  adjustment_transactions_count: number;
+  average_transaction_amount: number;
+  largest_transaction: number;
+  smallest_transaction: number;
+}
+
+// =============================================
+// BUDGET SUMMARY WITH METRICS
+// =============================================
+
+export interface ProjectBudgetSummaryWithMetrics extends ProjectBudgetSummary {
+  utilization_percentage: number;
+  expense_count: number;
+  refund_count: number;
+}
+}
