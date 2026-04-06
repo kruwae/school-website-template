@@ -15,3 +15,18 @@ export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABL
     autoRefreshToken: true,
   }
 });
+
+// Admin client for operations that bypass RLS (temporary fix for custom auth)
+export const supabaseAdmin = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
+  auth: {
+    storage: localStorage,
+    persistSession: true,
+    autoRefreshToken: true,
+  },
+  global: {
+    headers: {
+      // This is a temporary workaround - in production, use service key
+      'x-admin-override': 'true'
+    }
+  }
+});

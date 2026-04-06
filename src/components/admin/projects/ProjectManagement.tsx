@@ -276,19 +276,40 @@ export const ProjectManagement = () => {
     const handleDelete = async (projectId: string) => {
         if (!confirm('ต้องการลบโครงการนี้?')) return;
 
+        console.log('Attempting to delete project:', projectId);
+        console.log('Current user:', currentUser);
+        console.log('Can manage projects:', canManageProjects);
+
         try {
+            // Check if user has permission first
+            if (!canManageProjects) {
+                throw new Error('ไม่มีสิทธิ์ในการลบโครงการ เฉพาะผู้ดูแลระบบหรือผู้อำนวยการเท่านั้น');
+            }
+
             const { error } = await supabase
                 .from('projects')
                 .delete()
                 .eq('id', projectId);
 
-            if (error) throw error;
+            console.log('Delete result - error:', error);
+
+            if (error) {
+                // If RLS blocks it, provide helpful error message
+                if (error.message.includes('row-level security') || error.code === '42501') {
+                    throw new Error('ระบบป้องกันข้อมูลไม่允許การลบนี้ กรุณาติดต่อผู้ดูแลระบบเพื่อปรับสิทธิ์');
+                }
+                throw error;
+            }
 
             toast({ title: 'ลบโครงการสำเร็จ' });
             fetchAll();
         } catch (error) {
             console.error('Error deleting project:', error);
-            toast({ title: 'เกิดข้อผิดพลาด', description: 'ไม่สามารถลบโครงการได้', variant: 'destructive' });
+            toast({
+                title: 'เกิดข้อผิดพลาด',
+                description: error.message || 'ไม่สามารถลบโครงการได้',
+                variant: 'destructive'
+            });
         }
     };
 

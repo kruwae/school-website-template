@@ -24,7 +24,17 @@ Hardening │ Features  │ Features  │ Features  │ Hardening │  Deploymen
 ### Objective
 Establish type-safe database layer with complete table definitions and RLS policies.
 
-### Status: 🔄 IN PROGRESS (25% complete)
+### Status: 🔄 IN PROGRESS (25% complete) - BLOCKED BY RLS POLICIES
+
+**CRITICAL BLOCKER**: Admin users cannot delete or edit projects due to RLS policies using `auth.uid()` instead of custom authentication.
+
+**Immediate Fix Required**:
+1. Go to Supabase Dashboard → SQL Editor
+2. Run the SQL script in `FIX_RLS_POLICIES.sql`
+3. This will update RLS policies to work with custom authentication
+
+**Root Cause**: System uses custom authentication with sessionStorage, but RLS policies expect Supabase Auth `auth.uid()`.
+**Impact**: Admin users cannot perform CRUD operations on projects, budget, and related tables.
 
 ### Completed Tasks ✅
 
