@@ -401,4 +401,3 @@ export const getBudgetStatistics = async (projectId: string): Promise<any> => {
   if (error) throw error;
   return data;
 };
-};
