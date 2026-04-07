@@ -7,6 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Lock, User, ArrowLeft, School, ShieldCheck } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { login, getRedirectPath } from '@/lib/auth';
+import { trackSchoolEvent, setUserRole } from '@/utils/analytics';
 
 const ROLE_HINTS = [
   { role: 'admin', label: 'ผู้ดูแลระบบ', desc: 'เข้าถึงทุกฟีเจอร์', color: 'bg-red-100 text-red-700', icon: '🔑' },
@@ -30,6 +31,10 @@ const UniversalLogin = () => {
       const user = await login(username, password);
 
       if (user) {
+        // Track successful login
+        trackSchoolEvent.adminLogin();
+        setUserRole(user.role);
+
         toast({
           title: `ยินดีต้อนรับ คุณ${user.full_name}`,
           description: `เข้าสู่ระบบในบทบาท: ${user.role}`,

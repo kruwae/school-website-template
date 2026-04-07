@@ -7,15 +7,43 @@
     <meta name="description" content="โรงเรียนโสตศึกษา โรงเรียนมัธยมศึกษาชั้นนำ มุ่งพัฒนาผู้เรียนให้มีความเป็นเลิศทางวิชาการ มีคุณธรรม จริยธรรม และทักษะชีวิต" />
     <meta name="author" content="โรงเรียนโสตศึกษา" />
     <meta name="keywords" content="โรงเรียนมัธยม, การศึกษา, ห้องสื่อครูคอม, มัธยมศึกษา, โรงเรียน" />
+
+    <!-- PWA Meta Tags -->
+    <meta name="theme-color" content="#0f172a" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="School System" />
+    <link rel="apple-touch-icon" href="/pwa-192x192.svg" />
+    <link rel="manifest" href="/manifest.json" />
+
+    <!-- Open Graph -->
     <meta property="og:title" content="โรงเรียนโสตศึกษา | ก้าวสู่อนาคตด้วยปัญญา" />
     <meta property="og:description" content="โรงเรียนมัธยมศึกษาชั้นนำ มุ่งพัฒนาผู้เรียนให้มีความเป็นเลิศทางวิชาการ" />
     <meta property="og:type" content="website" />
     <meta property="og:image" content="https://lovable.dev/opengraph-image-p98pqg.png" />
+
+    <!-- Twitter -->
     <meta name="twitter:card" content="summary_large_image" />
+
+    <!-- Google Analytics (GA4) -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id=GA_MEASUREMENT_ID"></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      gtag('js', new Date());
+      gtag('config', 'GA_MEASUREMENT_ID', {
+        custom_map: {
+          'custom_parameter_1': 'page_section',
+          'custom_parameter_2': 'user_role'
+        }
+      });
+    </script>
+
     <link rel="canonical" href="/" />
   </head>
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
+</html>
 </html>

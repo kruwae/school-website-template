@@ -19,6 +19,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
 import { getCurrentUser } from '@/lib/auth';
+import { trackSchoolEvent } from '@/utils/analytics';
 
 interface Project {
     id: string;
@@ -238,6 +239,24 @@ export const ProjectManagement = () => {
 
             if (result.error) throw result.error;
 
+            // Track analytics
+            if (showEditDialog && selectedProject) {
+                trackSchoolEvent.projectUpdate(selectedProject.id, form.title);
+            } else {
+                // For new project, we need to get the created project ID
+                const { data: newProject } = await supabase
+                    .from('projects')
+                    .select('id')
+                    .eq('title', form.title)
+                    .order('created_at', { ascending: false })
+                    .limit(1)
+                    .single();
+
+                if (newProject) {
+                    trackSchoolEvent.projectCreate(newProject.id, form.title);
+                }
+            }
+
             // Handle team members
             if (showEditDialog && selectedProject) {
                 // Remove existing team members
@@ -299,6 +318,12 @@ export const ProjectManagement = () => {
                     throw new Error('ระบบป้องกันข้อมูลไม่允許การลบนี้ กรุณาติดต่อผู้ดูแลระบบเพื่อปรับสิทธิ์');
                 }
                 throw error;
+            }
+
+            // Track successful deletion
+            const deletedProject = projects.find(p => p.id === projectId);
+            if (deletedProject) {
+                trackSchoolEvent.projectUpdate(projectId, deletedProject.title); // Using update event for delete tracking
             }
 
             toast({ title: 'ลบโครงการสำเร็จ' });
