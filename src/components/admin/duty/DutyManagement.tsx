@@ -117,6 +117,14 @@ const startOfToday = () => {
 };
 
 const toDateOnly = (value: string) => {
+    if (!value) return new Date(NaN);
+
+    const dateOnlyMatch = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+    if (dateOnlyMatch) {
+        const [, year, month, day] = dateOnlyMatch;
+        return new Date(Number(year), Number(month) - 1, Number(day));
+    }
+
     const d = new Date(value);
     d.setHours(0, 0, 0, 0);
     return d;
@@ -1199,7 +1207,27 @@ export const DutyManagement = () => {
         ];
     };
 
-    const exportMonthlyReportPdf = () => {
+    const formatDateOnlyDisplay = (value: string) => {
+    const dateOnlyMatch = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value || '');
+    if (dateOnlyMatch) {
+        const [, year, month, day] = dateOnlyMatch;
+        return new Date(Number(year), Number(month) - 1, Number(day)).toLocaleDateString('th-TH');
+    }
+
+    return new Date(value).toLocaleDateString('th-TH');
+};
+
+const formatDateOnlyKey = (value: string) => {
+    const dateOnlyMatch = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value || '');
+    if (dateOnlyMatch) {
+        const [, year, month, day] = dateOnlyMatch;
+        return `${year}-${month}-${day}`;
+    }
+
+    return new Date(value).toISOString().split('T')[0];
+};
+
+const exportMonthlyReportPdf = () => {
         if (!canManageReports) {
             toast({ title: 'ไม่มีสิทธิ์ส่งออกรายงาน', description: 'เฉพาะหัวหน้าฝ่ายและแอดมิน', variant: 'destructive' });
             return;
@@ -1223,7 +1251,7 @@ export const DutyManagement = () => {
             return `
             <tr>
                 <td>${index + 1}</td>
-                <td>${new Date(record.duty_date).toLocaleDateString('th-TH')}</td>
+                <td>${formatDateOnlyDisplay(record.duty_date)}</td>
                 <td>${record.duty_shift_label}</td>
                 <td>${record.swap_requested_by_name || '-'}</td>
                 <td>${record.swap_target_name || '-'}</td>
@@ -1300,7 +1328,7 @@ export const DutyManagement = () => {
                         <div className="space-y-2">
                             <div className="flex flex-wrap items-center gap-2">
                                 <h3 className="font-semibold">
-                                    {new Date(assignment.duty_date).toLocaleDateString('th-TH')} • {assignment.duty_shift_label || SHIFT_MAP[assignment.duty_shift] || assignment.duty_shift}
+                                    {formatDateOnlyDisplay(assignment.duty_date)} • {assignment.duty_shift_label || SHIFT_MAP[assignment.duty_shift] || assignment.duty_shift}
                                 </h3>
                                 <Badge variant="outline">{ASSIGNMENT_STATUS_MAP[assignment.status] || assignment.status}</Badge>
                                 {dutyExpired && <Badge variant="destructive">พ้นกำหนด</Badge>}
@@ -1691,7 +1719,7 @@ export const DutyManagement = () => {
                                             <div className="flex justify-between items-center gap-3">
                                                 <div>
                                                     <div className="font-semibold">{item.assignment?.assigned_name || 'ไม่มีผู้รับเวร'}</div>
-                                                    <div className="text-xs text-muted-foreground">{new Date(item.record.duty_date).toLocaleDateString('th-TH')} • {item.record.duty_shift_label}</div>
+                                                    <div className="text-xs text-muted-foreground">{formatDateOnlyDisplay(item.record.duty_date)} • {item.record.duty_shift_label}</div>
                                                 </div>
                                                 <div className="flex items-center gap-2">
                                                     <Button size="sm" onClick={() => handleApproveRecord(item.record)}>
@@ -1724,10 +1752,10 @@ export const DutyManagement = () => {
                                     </div>
                                     <div className="grid grid-cols-7 gap-2">
                                         {calendarDays.map(date => {
-                                            const key = date.toISOString().split('T')[0];
+                                            const key = formatDateOnlyKey(date.toISOString());
                                             const items = calendarItemsByDate.get(key) || [];
                                             const isCurrentMonth = key.startsWith(filterMonth);
-                                            const isToday = key === new Date().toISOString().split('T')[0];
+                                            const isToday = key === formatDateOnlyKey(new Date().toISOString());
                                             return (
                                                 <DutyCalendarCell
                                                     key={key}
@@ -1795,10 +1823,10 @@ export const DutyManagement = () => {
                                 </div>
                                 <div className="grid grid-cols-7 gap-2">
                                     {calendarDays.map(date => {
-                                        const key = date.toISOString().split('T')[0];
+                                        const key = formatDateOnlyKey(date.toISOString());
                                         const items = recordCalendarItemsByDate.get(key) || [];
                                         const isCurrentMonth = key.startsWith(filterMonth);
-                                        const isToday = key === new Date().toISOString().split('T')[0];
+                                        const isToday = key === formatDateOnlyKey(new Date().toISOString());
                                         return (
                                             <DutyCalendarCell
                                                 key={key}
@@ -2107,7 +2135,7 @@ export const DutyManagement = () => {
                             {selectedCalendarItem
                                 ? 'รายละเอียดกำหนดเวร'
                                 : selectedCalendarDate
-                                    ? `รายการบันทึกเวรของวันที่ ${new Date(selectedCalendarDate).toLocaleDateString('th-TH')}`
+                                    ? `รายการบันทึกเวรของวันที่ ${formatDateOnlyDisplay(selectedCalendarDate)}`
                                     : 'รายละเอียดกำหนดเวร'}
                         </DialogTitle>
                     </DialogHeader>
@@ -2122,7 +2150,7 @@ export const DutyManagement = () => {
                                             <div className="flex justify-between items-center gap-2">
                                                 <div>
                                                     <div className="text-sm font-medium">{item.assignment?.assigned_name || 'ไม่มีผู้รับเวร'} • {item.record.duty_shift_label}</div>
-                                                    <div className="text-xs text-muted-foreground">{new Date(item.record.duty_date).toLocaleDateString('th-TH')}</div>
+                                                    <div className="text-xs text-muted-foreground">{formatDateOnlyDisplay(item.record.duty_date)}</div>
                                                 </div>
                                                 <div className="flex gap-2">
                                                     <Button size="sm" onClick={() => handleApproveRecord(item.record)}>อนุมัติ</Button>
