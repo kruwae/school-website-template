@@ -35,11 +35,19 @@ const UniversalLogin = () => {
         trackSchoolEvent.adminLogin();
         setUserRole(user.role);
 
+        const redirectPath = getRedirectPath(user.role);
+        console.log('[AdminLogin] login success:', {
+          userId: user.id,
+          username: user.username,
+          role: user.role,
+          redirectPath,
+        });
+
         toast({
           title: `ยินดีต้อนรับ คุณ${user.full_name}`,
           description: `เข้าสู่ระบบในบทบาท: ${user.role}`,
         });
-        navigate(getRedirectPath(user.role));
+        navigate(redirectPath, { replace: true });
       } else {
         toast({
           title: 'เข้าสู่ระบบไม่สำเร็จ',
@@ -163,9 +171,9 @@ const UniversalLogin = () => {
               </form>
 
               <div className="mt-6 p-4 bg-amber-50 border border-amber-200 rounded-xl">
-              
                 <div className="space-y-1 text-xs text-amber-700 font-mono">
-    
+                  <div>ตรวจสอบว่า username ตรงกับข้อมูลในตาราง `app_users`</div>
+                  <div>รหัสผ่านถูกตรวจด้วย `password_hash` (SHA-256)</div>
                 </div>
               </div>
             </CardContent>

@@ -175,7 +175,7 @@ const sanitizeStorageSegment = (value: string) => {
 };
 
 const buildAssignmentForm = () => ({
-    duty_date: new Date().toISOString().split('T')[0],
+    duty_date: `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}-${String(new Date().getDate()).padStart(2, '0')}`,
     duty_shift: 'morning',
     duty_shift_label: 'เวรเช้า',
     assigned_user_id: '',
@@ -192,13 +192,12 @@ const isHeadManagerPosition = (position: string) => {
 const getMonthGridDays = (monthValue: string) => {
     const [year, month] = monthValue.split('-').map(Number);
     const firstDay = new Date(year, month - 1, 1);
-    const start = new Date(firstDay);
+    const start = new Date(year, month - 1, 1);
     const dayOfWeek = start.getDay();
     start.setDate(start.getDate() - dayOfWeek);
     const days: Date[] = [];
     for (let i = 0; i < 42; i += 1) {
-        const current = new Date(start);
-        current.setDate(start.getDate() + i);
+        const current = new Date(start.getFullYear(), start.getMonth(), start.getDate() + i);
         days.push(current);
     }
     return days;
@@ -1214,7 +1213,8 @@ export const DutyManagement = () => {
             return new Date(Number(year), Number(month) - 1, Number(day)).toLocaleDateString('th-TH');
         }
 
-        return new Date(value).toLocaleDateString('th-TH');
+        const parsed = new Date(value);
+        return new Date(parsed.getFullYear(), parsed.getMonth(), parsed.getDate()).toLocaleDateString('th-TH');
     };
 
     const formatDateOnlyKey = (value: string) => {
@@ -1752,7 +1752,7 @@ export const DutyManagement = () => {
                                     </div>
                                     <div className="grid grid-cols-7 gap-2">
                                         {calendarDays.map(date => {
-                                            const key = formatDateOnlyKey(date.toISOString());
+                                            const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
                                             const items = recordCalendarItemsByDate.get(key) || [];
                                             const isCurrentMonth = key.startsWith(filterMonth);
                                             const isToday = key === formatDateOnlyKey(new Date().toISOString());
@@ -1823,7 +1823,7 @@ export const DutyManagement = () => {
                                 </div>
                                 <div className="grid grid-cols-7 gap-2">
                                     {calendarDays.map(date => {
-                                        const key = formatDateOnlyKey(date.toISOString());
+                                        const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
                                         const items = recordCalendarItemsByDate.get(key) || [];
                                         const isCurrentMonth = key.startsWith(filterMonth);
                                         const isToday = key === formatDateOnlyKey(new Date().toISOString());
@@ -2084,7 +2084,7 @@ export const DutyManagement = () => {
                         <div className="rounded-lg border bg-muted/20 p-3">
                             <p className="text-sm font-medium">{swapDialogRecord?.recorder_name} ต้องการเปลี่ยนเวร</p>
                             <p className="text-xs text-muted-foreground mt-1">
-                                วันที่ {swapDialogRecord ? new Date(swapDialogRecord.duty_date).toLocaleDateString('th-TH') : '-'} • {swapDialogRecord?.duty_shift_label || '-'}
+                                วันที่ {swapDialogRecord ? formatDateOnlyDisplay(swapDialogRecord.duty_date) : '-'} • {swapDialogRecord?.duty_shift_label || '-'}
                             </p>
                         </div>
 
