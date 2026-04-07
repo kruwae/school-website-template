@@ -83,7 +83,7 @@ const Index = () => {
                     <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                       <div>
                         <p className="text-sm text-muted-foreground">สถานะผู้ใช้ปัจจุบัน</p>
-                        <h3 className="text-xl font-bold">{currentUser ? `ยินดีต้อนรับ, ${currentUser.name}` : 'ผู้เข้าชมทั่วไป'}</h3>
+                        <h3 className="text-xl font-bold">{currentUser ? `ยินดีต้อนรับ, ${currentUser.full_name ?? currentUser.username}` : 'ผู้เข้าชมทั่วไป'}</h3>
                       </div>
                       <div className="inline-flex items-center gap-2 rounded-full bg-background px-3 py-1 text-sm font-medium text-foreground shadow-sm">
                         <span className={`h-2 w-2 rounded-full ${currentUser ? 'bg-emerald-500' : 'bg-amber-500'}`} />
@@ -140,7 +140,11 @@ const Index = () => {
                         <LogIn className="w-4 h-4" />
                         ไปยังแดชบอร์ดผู้ดูแล
                       </Button>
-                      <Button variant="outline" className="w-full gap-2" onClick={() => navigate('/admin')}>
+                      <Button
+                        className="w-full h-14 text-lg font-semibold gap-3 bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 hover:from-blue-700 hover:via-indigo-700 hover:to-purple-700 text-white shadow-lg shadow-indigo-500/30 border-0"
+                        onClick={() => navigate('/admin')}
+                      >
+                        <LogIn className="w-5 h-5" />
                         เข้าสู่ระบบแอดมิน
                       </Button>
                     </div>
