@@ -156,18 +156,20 @@ const UniversalLogin = () => {
                   </div>
                 </div>
 
-                <Button
-                  type="submit"
-                  className="w-full h-11 bg-blue-600 hover:bg-blue-700 font-medium text-base"
-                  disabled={isLoading}
-                >
-                  {isLoading ? (
-                    <span className="flex items-center gap-2">
-                      <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
-                      กำลังเข้าสู่ระบบ...
-                    </span>
-                  ) : 'เข้าสู่ระบบ'}
-                </Button>
+                <div className="flex justify-center">
+                  <Button
+                    type="submit"
+                    className="w-2/3 max-w-xs h-12 bg-gradient-to-r from-amber-500 via-orange-500 to-pink-600 hover:from-amber-600 hover:via-orange-600 hover:to-pink-700 text-white font-semibold text-base shadow-lg shadow-orange-500/30 border border-white/20 transition-all duration-200"
+                    disabled={isLoading}
+                  >
+                    {isLoading ? (
+                      <span className="flex items-center gap-2">
+                        <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                        กำลังเข้าสู่ระบบ...
+                      </span>
+                    ) : 'เข้าสู่ระบบ'}
+                  </Button>
+                </div>
               </form>
 
               <div className="mt-6 p-4 bg-amber-50 border border-amber-200 rounded-xl">
