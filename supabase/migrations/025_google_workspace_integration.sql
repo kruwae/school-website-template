@@ -27,7 +27,6 @@ CREATE TABLE IF NOT EXISTS public.google_classroom_courses (
   owner_id TEXT,
   enrollment_code TEXT,
   course_state TEXT DEFAULT 'ACTIVE',
-  school_id UUID REFERENCES public.schools(id),
   last_synced_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
