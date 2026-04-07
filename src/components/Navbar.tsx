@@ -1,7 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Menu, X } from 'lucide-react';
+import { ChevronRight, LogIn, Menu, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { getCurrentUser } from '@/lib/auth';
 import { useSchoolSettings } from '@/hooks/useSchoolSettings';
 import schoolLogo from '@/assets/school-logo.svg';
 
@@ -24,6 +25,7 @@ const Navbar = () => {
   const location = useLocation();
   const isHomePage = location.pathname === '/';
   const { settings } = useSchoolSettings();
+  const currentUser = useMemo(() => getCurrentUser(), [location.pathname]);
 
   useEffect(() => {
     const handleScroll = () => {
@@ -33,16 +35,17 @@ const Navbar = () => {
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
+  const showPublicNav = !currentUser || !isHomePage;
+
   return (
     <header
       className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${scrolled || !isHomePage
         ? 'bg-card/95 backdrop-blur-md shadow-lg'
         : 'bg-transparent'
-        }`}
+        } ${!showPublicNav ? 'pointer-events-none opacity-0 -translate-y-2' : ''}`}
     >
       <div className="container mx-auto px-4">
         <nav className="flex items-center justify-between h-20">
-          {/* Logo */}
           <Link to="/" className="flex items-center gap-3">
             <div className="w-12 h-12 rounded-full bg-white/95 shadow-md ring-2 ring-primary/20 flex items-center justify-center overflow-hidden">
               <img src={schoolLogo} alt="โลโก้โรงเรียน" className="w-full h-full object-contain" />
@@ -57,7 +60,6 @@ const Navbar = () => {
             </div>
           </Link>
 
-          {/* Desktop Navigation */}
           <div className="hidden lg:flex items-center gap-1">
             {navLinks.map((link) => (
               <Link
@@ -75,16 +77,31 @@ const Navbar = () => {
             ))}
           </div>
 
-          {/* CTA Button */}
-          <div className="hidden lg:block">
-            <Link to="/enrollment">
-              <Button className="bg-accent text-accent-foreground font-semibold hover:bg-accent/90 transition-all">
-                สมัครเรียน
-              </Button>
-            </Link>
+          <div className="hidden lg:flex items-center gap-3">
+            {currentUser ? (
+              <Link to="/admin/dashboard">
+                <Button className="gap-2 bg-primary text-primary-foreground hover:bg-primary/90">
+                  <ChevronRight className="w-4 h-4" />
+                  ไปยังแดชบอร์ด
+                </Button>
+              </Link>
+            ) : (
+              <>
+                <Link to="/admin">
+                  <Button variant="outline" className="gap-2 border-primary/20 bg-background/80 text-foreground hover:bg-secondary">
+                    <LogIn className="w-4 h-4" />
+                    เข้าสู่ระบบ
+                  </Button>
+                </Link>
+                <Link to="/enrollment">
+                  <Button className="bg-accent text-accent-foreground font-semibold hover:bg-accent/90 transition-all">
+                    สมัครเรียน
+                  </Button>
+                </Link>
+              </>
+            )}
           </div>
 
-          {/* Mobile Menu Button */}
           <button
             onClick={() => setIsOpen(!isOpen)}
             className={`lg:hidden p-2 rounded-lg transition-colors ${scrolled || !isHomePage ? 'text-foreground' : 'text-card'
@@ -94,7 +111,6 @@ const Navbar = () => {
           </button>
         </nav>
 
-        {/* Mobile Navigation */}
         <div
           className={`lg:hidden overflow-hidden transition-all duration-300 ${isOpen ? 'max-h-[500px] pb-4' : 'max-h-0'
             }`}
@@ -113,11 +129,30 @@ const Navbar = () => {
                 {link.name}
               </Link>
             ))}
-            <Link to="/enrollment" onClick={() => setIsOpen(false)}>
-              <Button className="w-full mt-4 bg-accent text-accent-foreground font-semibold hover:bg-accent/90">
-                สมัครเรียน
-              </Button>
-            </Link>
+            <div className="mt-4 grid grid-cols-2 gap-3">
+              {currentUser ? (
+                <Link to="/admin/dashboard" onClick={() => setIsOpen(false)}>
+                  <Button className="w-full gap-2">
+                    <ChevronRight className="w-4 h-4" />
+                    แดชบอร์ด
+                  </Button>
+                </Link>
+              ) : (
+                <>
+                  <Link to="/admin" onClick={() => setIsOpen(false)}>
+                    <Button variant="outline" className="w-full gap-2">
+                      <LogIn className="w-4 h-4" />
+                      เข้าสู่ระบบ
+                    </Button>
+                  </Link>
+                  <Link to="/enrollment" onClick={() => setIsOpen(false)}>
+                    <Button className="w-full bg-accent text-accent-foreground font-semibold hover:bg-accent/90">
+                      สมัครเรียน
+                    </Button>
+                  </Link>
+                </>
+              )}
+            </div>
           </div>
         </div>
       </div>
