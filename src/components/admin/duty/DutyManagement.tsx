@@ -1208,26 +1208,26 @@ export const DutyManagement = () => {
     };
 
     const formatDateOnlyDisplay = (value: string) => {
-    const dateOnlyMatch = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value || '');
-    if (dateOnlyMatch) {
-        const [, year, month, day] = dateOnlyMatch;
-        return new Date(Number(year), Number(month) - 1, Number(day)).toLocaleDateString('th-TH');
-    }
+        const dateOnlyMatch = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value || '');
+        if (dateOnlyMatch) {
+            const [, year, month, day] = dateOnlyMatch;
+            return new Date(Number(year), Number(month) - 1, Number(day)).toLocaleDateString('th-TH');
+        }
 
-    return new Date(value).toLocaleDateString('th-TH');
-};
+        return new Date(value).toLocaleDateString('th-TH');
+    };
 
-const formatDateOnlyKey = (value: string) => {
-    const dateOnlyMatch = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value || '');
-    if (dateOnlyMatch) {
-        const [, year, month, day] = dateOnlyMatch;
-        return `${year}-${month}-${day}`;
-    }
+    const formatDateOnlyKey = (value: string) => {
+        const dateOnlyMatch = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value || '');
+        if (dateOnlyMatch) {
+            const [, year, month, day] = dateOnlyMatch;
+            return `${year}-${month}-${day}`;
+        }
 
-    return new Date(value).toISOString().split('T')[0];
-};
+        return new Date(value).toISOString().split('T')[0];
+    };
 
-const exportMonthlyReportPdf = () => {
+    const exportMonthlyReportPdf = () => {
         if (!canManageReports) {
             toast({ title: 'ไม่มีสิทธิ์ส่งออกรายงาน', description: 'เฉพาะหัวหน้าฝ่ายและแอดมิน', variant: 'destructive' });
             return;
@@ -1753,7 +1753,7 @@ const exportMonthlyReportPdf = () => {
                                     <div className="grid grid-cols-7 gap-2">
                                         {calendarDays.map(date => {
                                             const key = formatDateOnlyKey(date.toISOString());
-                                            const items = calendarItemsByDate.get(key) || [];
+                                            const items = recordCalendarItemsByDate.get(key) || [];
                                             const isCurrentMonth = key.startsWith(filterMonth);
                                             const isToday = key === formatDateOnlyKey(new Date().toISOString());
                                             return (
@@ -1972,7 +1972,7 @@ const exportMonthlyReportPdf = () => {
                             })()}
                             <div className="rounded-lg border bg-muted/20 p-3">
                                 <p className="text-sm font-medium">
-                                    วันที่ {new Date(selectedAssignment.duty_date).toLocaleDateString('th-TH')} • {selectedAssignment.duty_shift_label}
+                                    วันที่ {formatDateOnlyDisplay(selectedAssignment.duty_date)} • {selectedAssignment.duty_shift_label}
                                 </p>
                                 <p className="text-xs text-muted-foreground mt-1">
                                     เวรของ {selectedAssignment.assigned_name}{selectedAssignment.assigned_position ? ` (${selectedAssignment.assigned_position})` : ''}
@@ -2202,7 +2202,7 @@ const exportMonthlyReportPdf = () => {
                     {selectedCalendarItem && (
                         <div className="space-y-3">
                             <div className="rounded-lg border bg-muted/20 p-3">
-                                <p className="text-sm font-medium">วันที่ {new Date(selectedCalendarItem.dutyDate).toLocaleDateString('th-TH')} • {selectedCalendarItem.title}</p>
+                                <p className="text-sm font-medium">วันที่ {formatDateOnlyDisplay(selectedCalendarItem.dutyDate)} • {selectedCalendarItem.title}</p>
                                 <p className="text-xs text-muted-foreground mt-1">{selectedCalendarItem.subtitle || 'ไม่มีหมายเหตุ'}</p>
                             </div>
                             <div className="grid gap-2">
@@ -2272,7 +2272,7 @@ const exportMonthlyReportPdf = () => {
                                 {respondDialogRecord?.swap_requested_by_name || respondDialogRecord?.recorder_name} ขอให้คุณรับเวรแทน
                             </p>
                             <p className="text-xs text-muted-foreground">
-                                วันที่ {respondDialogRecord ? new Date(respondDialogRecord.duty_date).toLocaleDateString('th-TH') : '-'} • {respondDialogRecord?.duty_shift_label || '-'}
+                                วันที่ {respondDialogRecord ? formatDateOnlyDisplay(respondDialogRecord.duty_date) : '-'} • {respondDialogRecord?.duty_shift_label || '-'}
                             </p>
                         </div>
 
