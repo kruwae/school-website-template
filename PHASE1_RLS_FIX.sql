@@ -33,7 +33,25 @@ BEGIN
 END;
 $$;
 
--- 3. อัปเดต Projects Policies ให้ปลอดภัยขึ้น
+-- 3. แก้ไข RLS Policies สำหรับ App Users
+ALTER TABLE public.app_users ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "App users readable" ON public.app_users;
+DROP POLICY IF EXISTS "App users manageable" ON public.app_users;
+DROP POLICY IF EXISTS "Enable read access for all users" ON public.app_users;
+DROP POLICY IF EXISTS "Enable insert for authenticated users only" ON public.app_users;
+DROP POLICY IF EXISTS "Enable update for users based on user_id" ON public.app_users;
+DROP POLICY IF EXISTS "Enable delete for users based on user_id" ON public.app_users;
+
+CREATE POLICY "App users readable"
+  ON public.app_users FOR SELECT USING (true);
+
+CREATE POLICY "App users manageable"
+  ON public.app_users FOR ALL
+  USING (public.is_admin_user())
+  WITH CHECK (public.is_admin_user());
+
+-- 4. อัปเดต Projects Policies ให้ปลอดภัยขึ้น
 DROP POLICY IF EXISTS "Projects readable" ON public.projects;
 DROP POLICY IF EXISTS "Projects manageable" ON public.projects;
 
